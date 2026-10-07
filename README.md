@@ -180,7 +180,9 @@ make eval
 - **`.env` tidak pernah di-commit.** Repo ini publik. Rujukannya `.env.example`.
 - **Data klien tidak pernah masuk git** — `sample_pdfs/`, `storage/outputs/`,
   `eval/golden/`, `storage/data_project_*.json` semuanya di-ignore.
-- **Isi `OPENADE_API_KEY`** sebelum service dijangkau dari luar localhost.
+- **Isi `OPENADE_API_KEY`** sebelum service dijangkau dari luar localhost. Di server, pakai
+  `OPENADE_ENV=production`: tanpa API key server menolak naik, `callback_url` dibatasi ke
+  `CALLBACK_ALLOWED_HOSTS`, dan galat 500 tidak membocorkan isi exception.
 
 ---
 

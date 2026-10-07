@@ -40,6 +40,11 @@ menumpuk antrian di mesin yang sama sampai makin lambat.
 ## Endpoint
 
 Semua endpoint di bawah butuh header `X-API-Key` bila `OPENADE_API_KEY` diisi di `.env`.
+Dengan `OPENADE_ENV=production`, server menolak naik bila `OPENADE_API_KEY` kosong.
+
+Bila `CALLBACK_SECRET` diisi, setiap callback membawa header
+`X-OpenADE-Signature: sha256=<hex>` = HMAC-SHA256 body mentah dengan kunci itu. Di n8n,
+hitung ulang di node Code atas body mentah dan tolak bila berbeda.
 
 ### `POST /api/v1/jobs` — kirim dokumen
 
@@ -51,7 +56,7 @@ Semua endpoint di bawah butuh header `X-API-Key` bila `OPENADE_API_KEY` diisi di
 | `doc_type` | tidak | `auto` (default), `contract`, `sph`, `bast` |
 | `ocr` | tidak | `rapidocr` (default), `mac`, `tesseract`, `paddle` |
 | `max_pages` | tidak | batas halaman |
-| `callback_url` | tidak | URL webhook n8n; hasil lengkap di-POST ke sini saat selesai |
+| `callback_url` | tidak | URL webhook n8n; hasil lengkap di-POST ke sini saat selesai. Hanya `http(s)`; host-nya harus ada di `CALLBACK_ALLOWED_HOSTS` bila diisi (wajib diisi di `OPENADE_ENV=production`), selain itu ditolak **400** |
 | `push_to_nocodb` | tidak | `true` = worker menulis hasilnya ke NocoDB setelah ekstraksi. Butuh `NOCODB_PUSH_ENABLED=1`; kalau mati, ditolak **409** seketika, sebelum masuk antrian |
 
 Balasan **202, seketika**:
