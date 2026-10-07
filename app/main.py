@@ -58,6 +58,20 @@ tags_metadata = [
 ]
 
 
+def _hapus_unggahan_yatim() -> None:
+    """
+    Antrean job ada di memori, jadi saat server naik tidak ada job yang memegang berkas di
+    TEMP_UPLOADS: semua isinya sisa job yang terputus restart. Tanpa ini, PDF kontrak yang
+    diunggah sebelum server mati tertinggal di disk selamanya. Aman karena server berjalan
+    satu proses (docker-compose, make serve); dengan --workers > 1 ini harus dipindah.
+    """
+    yatim = [p for p in config.TEMP_UPLOADS.iterdir() if p.is_dir()]
+    for p in yatim:
+        shutil.rmtree(p, ignore_errors=True)
+    if yatim:
+        logger.warning(f"🧹 {len(yatim)} unggahan dari job yang terputus restart dihapus.")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Worker antrian dijalankan saat server naik, bukan saat modul di-import."""
@@ -68,6 +82,7 @@ async def lifespan(_app: FastAPI):
             "OPENADE_ENV=production tetapi OPENADE_API_KEY kosong. Isi API key, atau jalankan "
             "dengan OPENADE_ENV=development bila memang hanya dijangkau dari localhost."
         )
+    _hapus_unggahan_yatim()
     job_queue.start()
     if not config.API_KEY:
         logger.warning(

@@ -310,3 +310,21 @@ def test_callback_ditandatangani_hmac_bila_secret_diisi(monkeypatch):
     harapan = hmac.new(b"kunci-uji", terkirim["content"], hashlib.sha256).hexdigest()
     assert terkirim["headers"]["X-OpenADE-Signature"] == f"sha256={harapan}"
     assert json.loads(terkirim["content"])["job_id"] == "j1"
+
+
+# --------------------------------------------------------------------- retensi unggahan
+def test_unggahan_yatim_dihapus_saat_server_naik():
+    """
+    Antrean job ada di memori. Bila server mati saat job masih antre, PDF kontrak yang sudah
+    diunggah tertinggal selamanya: tidak ada lagi yang tahu berkas itu ada. Server berjalan
+    satu proses (docker-compose, make serve), jadi saat naik tidak ada job lain yang memegang
+    berkas di folder ini.
+    """
+    yatim = config.TEMP_UPLOADS / "a1b2c3"
+    yatim.mkdir(parents=True)
+    (yatim / "kontrak.pdf").write_bytes(PDF)
+    (config.TEMP_UPLOADS / ".gitkeep").touch()
+    with TestClient(main.app):
+        pass
+    assert not yatim.exists()
+    assert (config.TEMP_UPLOADS / ".gitkeep").exists()
