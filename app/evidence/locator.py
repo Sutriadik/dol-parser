@@ -26,6 +26,9 @@ SKIP_KEYS = {
     "_kategori_terdeteksi",
     "Nomor Item",
     "No",
+    # Diturunkan dari judul kolom OTC/MRC; mencari teks "MRC" di dokumen tidak membuktikan
+    # apa pun dan hanya menambah baris "perlu dicek" di antrean PM.
+    "Jenis Biaya",
 }
 # "identifier_match" masuk daftar kuat: skeleton nomor yang sama persis (beda hanya di
 # pemisah) adalah bukti yang setara dengan containment. "identifier_match_ocr_tolerant"

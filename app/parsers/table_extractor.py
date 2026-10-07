@@ -80,6 +80,64 @@ def extract_tables_from_markdown(markdown_text: str) -> list[dict[str, Any]]:
     return tables
 
 
+def _baris_lanjutan_judul(cells: list[str]) -> bool:
+    """
+    Baris sesudah separator yang sebenarnya masih judul kolom. Syaratnya ketat supaya baris
+    kategori ("A | CPE") dan baris data tidak ikut tertelan: tanpa angka sama sekali, dan
+    paling sedikit dua sel berisi kata judul yang dikenal.
+    """
+    isi = [c.strip() for c in cells if c.strip()]
+    if not isi or any(re.search(r"\d", c) for c in isi):
+        return False
+    kata_judul = (
+        DESC_KEYWORDS
+        + QTY_KEYWORDS
+        + UNIT_KEYWORDS
+        + PERIOD_KEYWORDS
+        + UNIT_PRICE_KEYWORDS
+        + TOTAL_KEYWORDS
+        + ["no", "harga"]
+    )
+    return sum(_header_matches(c, kata_judul) for c in isi) >= 2
+
+
+def _gabung_judul_bertingkat(
+    headers: list[str], data_lines: list[str]
+) -> tuple[list[str], list[str]]:
+    """
+    Kontrak layanan Telkom menulis judul kolom dalam tiga baris ("Harga Kesepakatan" /
+    "Harga Bulanan" / "OTC"). Markdown hanya mengenal satu baris judul, jadi dua baris
+    lainnya dulu terbaca sebagai data: kolom uraian bernama "Kolom_2", detect_item_columns
+    tidak menemukan apa pun, dan seluruh item KL jatuh ke jalur LLM. Baris lanjutan
+    digabung ke judul kolomnya.
+    """
+    lanjutan: list[list[str]] = []
+    sisa = list(data_lines)
+    while sisa and len(lanjutan) < 3:
+        if is_markdown_table_separator(sisa[0]):
+            sisa.pop(0)
+            continue
+        cells = parse_markdown_table_row(sisa[0])
+        if not _baris_lanjutan_judul(cells):
+            break
+        lanjutan.append(cells)
+        sisa.pop(0)
+    if not lanjutan:
+        return headers, data_lines
+
+    gabungan: list[str] = []
+    for i, h in enumerate(headers):
+        bagian = [] if re.fullmatch(r"Kolom_\d+(?:_\d+)?", h) else [re.sub(r"_\d+$", "", h)]
+        bagian += [baris[i].strip() for baris in lanjutan if i < len(baris) and baris[i].strip()]
+        nama = " ".join(bagian) or f"Kolom_{i + 1}"
+        dasar, n = nama, 1
+        while nama in gabungan:
+            nama = f"{dasar}_{n}"
+            n += 1
+        gabungan.append(nama)
+    return gabungan, sisa
+
+
 def _process_table_block(lines: list[str], table_idx: int) -> dict[str, Any] | None:
     """Memproses sekumpulan baris markdown table menjadi dict terstruktur."""
     if len(lines) < 2:
@@ -110,6 +168,7 @@ def _process_table_block(lines: list[str], table_idx: int) -> dict[str, Any] | N
                 counter += 1
             headers.append(col_name)
         data_lines = lines[header_idx + 2 :]  # Lewati header & separator
+        headers, data_lines = _gabung_judul_bertingkat(headers, data_lines)
 
     rows: list[dict[str, Any]] = []
     current_kategori: str | None = None
@@ -249,6 +308,32 @@ def detect_item_columns(headers: list[str]) -> dict[str, Any]:
             )
         ],
     }
+
+
+def _jenis_biaya_kolom(header: str) -> str | None:
+    """
+    "OTC" / "MRC" bila judul kolom menyebut tepat salah satunya, selain itu None. Judul yang
+    menyebut keduanya (OCR menggabungkan dua judul: "Harga Satuan. MRC OTC") tidak dipakai
+    menebak. "Bulanan" saja tidak berarti MRC: template Telkom menaruh OTC di bawah
+    kelompok "Harga Bulanan".
+    """
+    otc = _header_matches(header, ["otc", "one time charge"])
+    mrc = _header_matches(header, ["mrc", "monthly recurring charge", "monthly recurring"])
+    if otc == mrc:
+        return None
+    return "OTC" if otc else "MRC"
+
+
+def jenis_biaya_baris(row: dict[str, Any], kolom_harga: list[str]) -> str | None:
+    """Jenis biaya satu baris dari judul kolom yang angkanya terisi."""
+    jenis = {
+        _jenis_biaya_kolom(k)
+        for k in kolom_harga
+        if (parse_indonesian_number(row.get(k, 0)) or 0) > 0
+    } - {None}
+    if jenis == {"OTC", "MRC"}:
+        return "OTC dan MRC"
+    return jenis.pop() if jenis else None
 
 
 def clean_desc_and_extract_item_no(desc: str, current_no: str = "") -> tuple[str, str]:
@@ -436,6 +521,7 @@ def extract_items_from_markdown_tables(
                     "Periode/Durasi": periode,
                     "Harga Satuan": h_sat,
                     "Jumlah Harga": h_tot,
+                    "Jenis Biaya": jenis_biaya_baris(r, price_cols + total_cols),
                     "Keterangan": None,
                     "Atribut Tambahan": extra if extra else None,
                 }
@@ -462,6 +548,7 @@ def extract_items_from_markdown_tables(
                     "Periode/Durasi": periode,
                     "Harga Satuan": h_sat,
                     "Total Harga": h_tot,
+                    "Jenis Biaya": jenis_biaya_baris(r, price_cols + total_cols),
                     "Keterangan": None,
                     "Atribut Tambahan": extra if extra else None,
                 }

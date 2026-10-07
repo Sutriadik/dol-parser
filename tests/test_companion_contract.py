@@ -140,6 +140,7 @@ def test_payload_kontrak_hanya_tabel_berlaku_dan_lolos_validasi():
         "contract_party",
         "contract_item",
         "contract_requirement",
+        "contract_payment_term",
         "extracted_field",
         "extraction_run",
     }
@@ -287,7 +288,7 @@ def test_eval_tidak_menghitung_field_yang_sengaja_dihapus():
 
 # --------------------------------------------------------------------- nasib setiap field
 # Daftar ini adalah keputusan tertulis: setiap field yang diminta ke LLM berakhir di mana.
-#   "kolom"           -> kolom tabel domain (contract, contract_party, ...) DAN Hasil Ekstraksi
+#   "kolom"           -> kolom tabel domain (contract, ...); umumnya juga di Hasil Ekstraksi
 #   "hasil_ekstraksi" -> hanya baris di Hasil Ekstraksi (dilihat PM), tanpa kolom untuk n8n
 #   "tidak_disimpan"  -> tidak sampai ke NocoDB sama sekali; hanya ada di *.extract.json
 #
@@ -316,6 +317,7 @@ NASIB_KONTRAK = {
     "List Item/Barang[].Periode/Durasi": "kolom",
     "List Item/Barang[].Harga Satuan": "kolom",
     "List Item/Barang[].Jumlah Harga": "kolom",
+    "List Item/Barang[].Jenis Biaya": "kolom",  # 2026.10.4; kolom saja (SKIP_KEYS)
     "List Item/Barang[].Keterangan": "kolom",
     # OTC/MRC dsb. Dilewati locator (SKIP_KEYS) karena bentuknya dict bebas.
     "List Item/Barang[].Atribut Tambahan": "tidak_disimpan",
@@ -332,7 +334,7 @@ NASIB_KONTRAK = {
     "Nomor Rekening Bank": "kolom",
     "Nama Rekening Bank": "kolom",
     "Mekanisme Skema Pembayaran": "kolom",
-    "Ketentuan Pembayaran[]": "hasil_ekstraksi",
+    "Ketentuan Pembayaran[]": "kolom",  # 2026.10.4: contract_payment_term
     "Persentase Sanksi/Penalti": "kolom",
     "Lokasi": "kolom",
     "Tanggal Pembuatan Dokumen": "kolom",
@@ -404,6 +406,10 @@ def _isi(data, jalur, nilai):
             cur = cur.setdefault(kunci, {})
 
 
+# Field berpilihan: pemeta sengaja mengosongkan nilai asing, jadi butuh contoh yang sah.
+_NILAI_CONTOH = {"Jenis Biaya": "MRC"}
+
+
 def nasib_sebenarnya(model, pemeta, dasar, doc_type):
     """
     Uji perilaku, bukan membaca kode pemeta: tiap field diisi sendirian di atas data `dasar`
@@ -428,7 +434,7 @@ def nasib_sebenarnya(model, pemeta, dasar, doc_type):
     nasib = {}
     for jalur in _jalur_daun(model):
         data = copy.deepcopy(dasar)
-        _isi(data, jalur, "1234567")
+        _isi(data, jalur, _NILAI_CONTOH.get(jalur.rsplit(".", 1)[-1], "1234567"))
         payload = jalankan(data)
         konkret = jalur.replace("[]", "[0]")
         if domain(payload) != acuan:
@@ -462,3 +468,85 @@ def test_setiap_field_kontrak_punya_nasib_tercatat():
     }
     sebenarnya = nasib_sebenarnya(ContractExtractionSchema, map_contract, dasar, "contract")
     _bandingkan_nasib(sebenarnya, NASIB_KONTRAK)
+
+
+# --------------------------------------------------------------------- termin & OTC/MRC
+def _dengan_ketentuan(*baris):
+    raw = _sample_contract_extraction()
+    raw["data"]["Ketentuan Pembayaran"] = list(baris)
+    raw["evidence"].append(
+        {
+            "field": "Ketentuan Pembayaran[0]",
+            "value": baris[0],
+            "page": 4,
+            "evidence_text": baris[0],
+            "status": "AUTO_VERIFIED",
+        }
+    )
+    return map_contract(raw)["contract_payment_term"]
+
+
+def test_termin_tertulis_tersimpan_dengan_nominalnya():
+    rows = _dengan_ketentuan(
+        "Termin I (Januari s.d. Maret) sebesar Rp. 27,500,000",
+        "Termin II pelunasan sebesar Rp...36.000.000, dibayarkan setelah BAST",
+    )
+    assert [(r["line_no"], r["term_label_text"], r["amount"]) for r in rows] == [
+        (1, "Termin I", 27_500_000),
+        (2, "Termin II", 36_000_000),
+    ]
+    assert rows[0]["evidence_page"] == 4 and rows[0]["evidence_quote"]
+
+
+def test_kalimat_banyak_termin_tidak_dipecah_atau_dihitung():
+    """
+    "2 termin, masing-masing Rp X": membuat dua baris atau menulis X sebagai nilai satu
+    termin adalah hasil hitungan, bukan yang tertulis (aturan 3). Kalimatnya disimpan utuh.
+    """
+    rows = _dengan_ketentuan(
+        "Pembayaran secara Termin sebanyak 2 (dua) termin, dengan masing-masing termin "
+        "sebesar Rp. 100.000.000,-"
+    )
+    assert len(rows) == 1
+    assert rows[0]["term_label_text"] is None and rows[0]["amount"] is None
+    assert "masing-masing" in rows[0]["term_text"]
+
+
+def test_syarat_pembayaran_umum_tersimpan_tanpa_label_termin():
+    rows = _dengan_ketentuan(
+        "Surat permohonan pembayaran dilampiri kuitansi bermaterai cukup",
+        "Uang muka 30% dibayarkan setelah PO terbit",
+    )
+    assert rows[0]["term_label_text"] is None and rows[0]["amount"] is None
+    assert rows[1]["term_label_text"] == "Uang muka"
+    assert rows[1]["percentage_text"] == "30%" and rows[1]["amount"] is None
+
+
+def test_termin_dengan_dua_nominal_tidak_memilih_salah_satu():
+    rows = _dengan_ketentuan("Termin I sebesar Rp 10.000.000 dari total Rp 40.000.000")
+    assert rows[0]["term_label_text"] == "Termin I" and rows[0]["amount"] is None
+
+
+def test_jenis_biaya_item_dipetakan_ke_pilihan_skema():
+    raw = _sample_contract_extraction()
+    items = raw["data"]["List Item/Barang"]
+    items[0]["Jenis Biaya"] = "MRC"
+    if len(items) > 1:
+        items[1]["Jenis Biaya"] = "sewa bulanan"  # nilai asing -> kosong, bukan tebakan
+    payload = map_contract(raw)
+    jenis = [r["charge_type"] for r in payload["contract_item"]]
+    assert jenis[0] == "mrc"
+    assert all(j is None for j in jenis[1:])
+    assert validate_payload(payload) == []
+
+
+def test_jenis_biaya_tidak_menambah_antrean_pm():
+    """
+    Jenis Biaya diturunkan dari judul kolom tabel. Grounding hanya bisa mencari teks "MRC" di
+    dokumen, yang tidak membuktikan apa pun, sehingga setiap item muncul sebagai "perlu dicek"
+    (KL FULL SIGNED: 5 baris tambahan). Nilainya tetap terlihat PM di Rincian Kontrak.
+    """
+    from app.evidence.locator import iter_leaf_fields
+
+    data = {"List Item/Barang": [{"Deskripsi Item/Barang/Pekerjaan": "x", "Jenis Biaya": "MRC"}]}
+    assert not any(p.endswith("Jenis Biaya") for p, _ in iter_leaf_fields(data))

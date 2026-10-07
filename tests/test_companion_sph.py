@@ -156,6 +156,7 @@ NASIB_SPH = {
     "Daftar Penawaran Harga[].Periode/Durasi": "kolom",
     "Daftar Penawaran Harga[].Harga Satuan": "kolom",
     "Daftar Penawaran Harga[].Total Harga": "kolom",
+    "Daftar Penawaran Harga[].Jenis Biaya": "kolom",  # 2026.10.4
     "Daftar Penawaran Harga[].Keterangan": "kolom",
     "Daftar Penawaran Harga[].Atribut Tambahan": "tidak_disimpan",  # SKIP_KEYS
     "Subtotal": "kolom",

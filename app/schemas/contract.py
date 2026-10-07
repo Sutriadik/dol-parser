@@ -118,6 +118,13 @@ class ItemBarangPekerjaan(BaseModel):
     jumlah_harga: float = Field(
         ..., alias="Jumlah Harga", description="Total harga item dalam Rupiah (MRC/OTC)"
     )
+    # Diisi pembaca tabel dari judul kolom tempat angkanya berada, bukan oleh LLM: field item
+    # dibuang dari skema pass-1 (DETERMINISTIC_FIELDS). Kosong bila judulnya tidak jelas.
+    jenis_biaya: str | None = Field(
+        None,
+        alias="Jenis Biaya",
+        description="OTC (sekali bayar), MRC (biaya bulanan), atau 'OTC dan MRC'",
+    )
     keterangan: str | None = Field(
         None, alias="Keterangan", description="Catatan atau keterangan khusus pada baris tabel"
     )

@@ -154,7 +154,7 @@ class AppConfig(BaseModel):
     # Versi skema DATABASE (repo dol-schema) yang dipahami kode ini. dol-schema dipasang dari
     # folder sejajar, jadi yang terpasang adalah apa pun yang sedang ada di folder itu --
     # app/companion menolak jalan bila versinya berbeda. Naikkan bersama perubahan pemeta.
-    DOL_SCHEMA_VERSION: str = "companion-2026.10.3"
+    DOL_SCHEMA_VERSION: str = "companion-2026.10.4"
 
 
 config = AppConfig()

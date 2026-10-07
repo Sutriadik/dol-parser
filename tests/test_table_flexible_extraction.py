@@ -201,3 +201,80 @@ def test_schema_item_number_defaults_and_preservation():
         }
     )
     assert sph_item1.nomor is None
+
+
+# --------------------------------------------------------------------- OTC / MRC
+# Bentuk tabel meniru kontrak layanan Telkom di korpus; nilai dan uraian rekaan.
+TABEL_JUDUL_BERTINGKAT = """
+| | | | | Masa | Harga Kesepakatan | Harga Kesepakatan | Harga Kesepakatan | Harga Kesepakatan |
+|---|---|---|---|---|---|---|---|---|
+|No|Uraian Pekerjaan|Jumlah|Satuan|Layanan|Harga Bulanan|Harga Bulanan|Harga Total|Harga Total|
+| | | | | (bln) | OTC | MRC | OTC | MRC |
+| A | CPE | | | | | | | |
+| 1 | Lisensi Firewall Contoh | 1 | paket | 12 | | 1.000.000 | | 12.000.000 |
+| 2 | Pemasangan Perangkat Contoh | 2 | unit | | 500.000 | | 1.000.000 | |
+"""
+
+
+def test_judul_tabel_bertingkat_digabung_dan_item_terbaca():
+    """
+    Tabel KL menulis judul dalam tiga baris. Dulu hanya baris pertama yang dianggap judul,
+    sehingga kolom uraian bernama "Kolom_2", baris "Harga Bulanan" dan "OTC/MRC" dibaca
+    sebagai data, dan seluruh item jatuh ke jalur LLM.
+    """
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    items = extract_items_from_markdown_tables(TABEL_JUDUL_BERTINGKAT, doc_type="contract")
+    assert [i["Deskripsi Item/Barang/Pekerjaan"] for i in items] == [
+        "Lisensi Firewall Contoh",
+        "Pemasangan Perangkat Contoh",
+    ]
+    assert items[0]["Kategori/Kelompok"] == "CPE"  # baris kategori tidak ikut jadi judul
+    assert items[0]["Harga Satuan"] == 1_000_000 and items[0]["Jumlah Harga"] == 12_000_000
+    assert items[1]["volume"] == 2
+
+
+def test_jenis_biaya_dari_judul_kolom_tempat_angka_berada():
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    items = extract_items_from_markdown_tables(TABEL_JUDUL_BERTINGKAT, doc_type="contract")
+    assert [i["Jenis Biaya"] for i in items] == ["MRC", "OTC"]
+
+
+def test_judul_yang_menyebut_otc_dan_mrc_sekaligus_tidak_dipakai_menebak():
+    """KL FULL SIGNED: OCR menggabungkan dua judul jadi "Harga Satuan. MRC OTC"."""
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    md = """
+| Uraian Pekerjaan | Jumlah | Satuan | Harga Satuan. MRC OTC | Harga Total. MRC |
+|---|---|---|---|---|
+| Lisensi Contoh | 1 | Paket | 1.000.000 | 12.000.000 |
+| Layanan Contoh | 1 | Paket | 500.000 | |
+"""
+    items = extract_items_from_markdown_tables(md, doc_type="contract")
+    # Baris 1: kolom total jelas MRC. Baris 2: hanya kolom gabungan yang terisi -> kosong.
+    assert [i["Jenis Biaya"] for i in items] == ["MRC", None]
+
+
+def test_baris_berisi_otc_dan_mrc_ditandai_keduanya():
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    md = """
+| Uraian | Jumlah | Harga OTC | Harga MRC |
+|---|---|---|---|
+| Internet Contoh | 1 | 2.000.000 | 750.000 |
+"""
+    items = extract_items_from_markdown_tables(md, doc_type="sph")
+    assert items[0]["Jenis Biaya"] == "OTC dan MRC"
+
+
+def test_tabel_tanpa_otc_mrc_jenis_biaya_kosong():
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    md = """
+| No | Uraian | Volume | Satuan | Harga Satuan | Jumlah Harga |
+|---|---|---|---|---|---|
+| 1 | Barang Contoh | 2 | unit | 100.000 | 200.000 |
+"""
+    for dt in ("contract", "sph"):
+        assert extract_items_from_markdown_tables(md, doc_type=dt)[0]["Jenis Biaya"] is None
