@@ -283,3 +283,182 @@ def test_eval_tidak_menghitung_field_yang_sengaja_dihapus():
     }
     hasil = evaluate_document(golden, {"data": {"Nomor Kontrak Kerja": "K/1"}})
     assert [r["field"] for r in hasil["rows"]] == ["Nomor Kontrak Kerja"]
+
+
+# --------------------------------------------------------------------- nasib setiap field
+# Daftar ini adalah keputusan tertulis: setiap field yang diminta ke LLM berakhir di mana.
+#   "kolom"           -> kolom tabel domain (contract, contract_party, ...) DAN Hasil Ekstraksi
+#   "hasil_ekstraksi" -> hanya baris di Hasil Ekstraksi (dilihat PM), tanpa kolom untuk n8n
+#   "tidak_disimpan"  -> tidak sampai ke NocoDB sama sekali; hanya ada di *.extract.json
+#
+# Dua kegunaan:
+# 1. Field yang diekstrak tapi diam-diam dibuang pemeta langsung terlihat.
+# 2. field_path = alias Pydantic, dan keputusan PM (field_review) dikunci dengan field_path.
+#    Mengganti nama alias membuat keputusan PM lama tidak lagi cocok dengan baris mana pun.
+#    Tes ini gagal saat alias berubah, supaya perubahan itu disengaja, bukan kebetulan.
+NASIB_KONTRAK = {
+    "Pihak Pertama.Nama Perusahaan": "kolom",
+    "Pihak Pertama.NPWP": "tidak_disimpan",  # FIELD_TIDAK_DISIMPAN, keputusan 2026-10-04
+    "Pihak Pertama.Nama Representative": "kolom",
+    "Pihak Pertama.Jabatan": "kolom",
+    "Pihak Pertama.Alamat": "kolom",
+    "Pihak Kedua.Nama Perusahaan": "kolom",
+    "Pihak Kedua.NPWP": "tidak_disimpan",
+    "Pihak Kedua.Nama Representative": "kolom",
+    "Pihak Kedua.Jabatan": "kolom",
+    "Pihak Kedua.Alamat": "kolom",
+    "List Item/Barang[].Nomor Item": "tidak_disimpan",  # SKIP_KEYS; line_no = urutan baca
+    "List Item/Barang[].Kategori/Kelompok": "kolom",
+    "List Item/Barang[].Deskripsi Item/Barang/Pekerjaan": "kolom",
+    "List Item/Barang[].Spesifikasi": "kolom",
+    "List Item/Barang[].volume": "kolom",
+    "List Item/Barang[].unit": "kolom",
+    "List Item/Barang[].Periode/Durasi": "kolom",
+    "List Item/Barang[].Harga Satuan": "kolom",
+    "List Item/Barang[].Jumlah Harga": "kolom",
+    "List Item/Barang[].Keterangan": "kolom",
+    # OTC/MRC dsb. Dilewati locator (SKIP_KEYS) karena bentuknya dict bebas.
+    "List Item/Barang[].Atribut Tambahan": "tidak_disimpan",
+    "Nomor Kontrak Kerja": "kolom",
+    "Nomor Kontrak Internal": "kolom",
+    "Daftar Nomor Kontrak[]": "hasil_ekstraksi",
+    "Tanggal Negosiasi": "hasil_ekstraksi",
+    "Nama Pekerjaan": "kolom",
+    "persentase ppn": "kolom",
+    "Jangka Waktu": "kolom",
+    "Durasi Kerja": "kolom",
+    "Nama Bank": "kolom",
+    "Lokasi Cabang Bank": "hasil_ekstraksi",
+    "Nomor Rekening Bank": "kolom",
+    "Nama Rekening Bank": "kolom",
+    "Mekanisme Skema Pembayaran": "kolom",
+    "Ketentuan Pembayaran[]": "hasil_ekstraksi",
+    "Persentase Sanksi/Penalti": "kolom",
+    "Lokasi": "kolom",
+    "Tanggal Pembuatan Dokumen": "kolom",
+    "sub total": "kolom",
+    "Total PPN": "kolom",
+    "Total Harga Pekerjaan": "kolom",
+    "Jumlah Terbilang": "hasil_ekstraksi",
+    "Garansi": "hasil_ekstraksi",
+    "Klausul Jaminan.Nomor Pasal": "hasil_ekstraksi",
+    "Klausul Jaminan.Uraian Jaminan": "hasil_ekstraksi",
+    "Syarat Lampiran Wajib BAST[]": "kolom",
+    "Dokumen Pendukung[].Nama Dokumen": "hasil_ekstraksi",
+    "Dokumen Pendukung[].Nomor Dokumen": "hasil_ekstraksi",
+    "Dokumen Pendukung[].Tanggal Dokumen": "hasil_ekstraksi",
+    "Daftar Pasal Kontrak[].Nomor Pasal": "hasil_ekstraksi",
+    "Daftar Pasal Kontrak[].Judul Pasal": "hasil_ekstraksi",
+    "Daftar Penandatangan[].Nama": "hasil_ekstraksi",
+    "Daftar Penandatangan[].Jabatan": "hasil_ekstraksi",
+    "Informasi Bea Meterai": "hasil_ekstraksi",
+    "Daftar Tabel Terstruktur[]": "tidak_disimpan",  # SKIP_KEYS
+}
+
+
+def _jalur_daun(model, awalan=""):
+    """Semua field daun model Pydantic sebagai jalur alias; daftar ditulis `nama[]`."""
+    import types
+    import typing
+
+    from pydantic import BaseModel
+
+    def buka(t):
+        args = [a for a in typing.get_args(t) if a is not type(None)]
+        if typing.get_origin(t) is list:
+            return True, args[0]
+        if typing.get_origin(t) in (typing.Union, types.UnionType) and len(args) == 1:
+            return buka(args[0])
+        return False, t
+
+    for nama, f in model.model_fields.items():
+        jalur = awalan + (f.alias or nama)
+        daftar, t = buka(f.annotation)
+        model_anak = isinstance(t, type) and issubclass(t, BaseModel)
+        if daftar:
+            yield from _jalur_daun(t, jalur + "[].") if model_anak else [jalur + "[]"]
+        elif model_anak:
+            yield from _jalur_daun(t, jalur + ".")
+        else:
+            yield jalur
+
+
+def _isi(data, jalur, nilai):
+    """Isi `nilai` di `jalur` (format _jalur_daun); elemen daftar selalu indeks 0."""
+    bagian = jalur.split(".")
+    cur = data
+    for i, b in enumerate(bagian):
+        akhir = i == len(bagian) - 1
+        kunci = b.removesuffix("[]")
+        if b.endswith("[]"):
+            daftar = cur.setdefault(kunci, [])
+            if akhir:
+                daftar.append(nilai)
+                return
+            if not daftar:
+                daftar.append({})
+            cur = daftar[0]
+        elif akhir:
+            cur[kunci] = nilai
+        else:
+            cur = cur.setdefault(kunci, {})
+
+
+def nasib_sebenarnya(model, pemeta, dasar, doc_type):
+    """
+    Uji perilaku, bukan membaca kode pemeta: tiap field diisi sendirian di atas data `dasar`
+    (yang cukup supaya baris anak tidak dibuang), lalu dilihat sampai ke mana nilainya.
+    Bukti dibangun dengan iter_leaf_fields yang sama dengan engine.
+    """
+    from app.evidence.locator import iter_leaf_fields
+
+    def jalankan(data):
+        bukti = [
+            {"field": f, "value": v, "status": "AUTO_VERIFIED"} for f, v in iter_leaf_fields(data)
+        ]
+        hasil = {"document_type": doc_type, "data": data, "evidence": bukti}
+        hasil["run_info"] = {"document_id": "sha-uji"}
+        return pemeta(hasil)
+
+    def domain(payload):
+        lewati = ("document", "extracted_field", "extraction_run")
+        return {k: v for k, v in payload.items() if k not in lewati}
+
+    acuan = domain(jalankan(copy.deepcopy(dasar)))
+    nasib = {}
+    for jalur in _jalur_daun(model):
+        data = copy.deepcopy(dasar)
+        _isi(data, jalur, "1234567")
+        payload = jalankan(data)
+        konkret = jalur.replace("[]", "[0]")
+        if domain(payload) != acuan:
+            nasib[jalur] = "kolom"
+        elif any(r["field_path"] == konkret for r in payload["extracted_field"]):
+            nasib[jalur] = "hasil_ekstraksi"
+        else:
+            nasib[jalur] = "tidak_disimpan"
+    return nasib
+
+
+def _bandingkan_nasib(sebenarnya, tercatat):
+    baru = sorted(set(sebenarnya) - set(tercatat))
+    hilang = sorted(set(tercatat) - set(sebenarnya))
+    assert not (baru or hilang), (
+        f"Alias field ekstraksi berubah.\n  baru: {baru}\n  hilang: {hilang}\n"
+        "Bila alias diganti nama, keputusan PM (field_review) dengan field_path lama tidak "
+        "lagi cocok. Catat nasib field baru di daftar NASIB_*."
+    )
+    beda = {j: (tercatat[j], sebenarnya[j]) for j in tercatat if tercatat[j] != sebenarnya[j]}
+    assert not beda, f"Nasib field berbeda dari catatan (tercatat, sebenarnya): {beda}"
+
+
+def test_setiap_field_kontrak_punya_nasib_tercatat():
+    from app.schemas.contract import ContractExtractionSchema
+
+    dasar = {
+        "Pihak Pertama": {"Nama Perusahaan": "PT A"},
+        "Pihak Kedua": {"Nama Perusahaan": "PT B"},
+        "List Item/Barang": [{"Deskripsi Item/Barang/Pekerjaan": "Barang dasar"}],
+    }
+    sebenarnya = nasib_sebenarnya(ContractExtractionSchema, map_contract, dasar, "contract")
+    _bandingkan_nasib(sebenarnya, NASIB_KONTRAK)
