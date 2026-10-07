@@ -422,9 +422,10 @@ def test_terbilang_recovered_from_document_text():
 def test_prompts_do_not_contain_evaluation_documents():
     # Nilai pembanding dibaca dari golden set lokal, bukan ditulis di sini: daftar nilai
     # asli di berkas tes sama saja membocorkannya ke repo publik. Hanya nilai yang memuat
-    # angka. Cakupannya sama dengan daftar lama (nomor SPK, nomor SPH, alamat, total):
-    # field Nomor/Alamat/Total. Field lain (NPWP, durasi, harga baris) belum diperiksa --
-    # sebagian kebetulan sama dengan contoh di prompt dan perlu dipilah dengan `make eval`.
+    # angka. Cakupannya: nomor dokumen, alamat, total, NPWP, dan deskripsi item -- tiga yang
+    # terakhir pernah bocor dari dokumen KL ke contoh prompt (diperbaiki 7 Okt 2026). Harga
+    # baris, durasi, dan persen denda sengaja tidak diperiksa: angka bulat seperti
+    # "450.000" atau "30 hari kalender" wajar muncul di contoh format.
     import json
 
     from app.extractors import prompts
@@ -437,7 +438,7 @@ def test_prompts_do_not_contain_evaluation_documents():
         fields = json.loads(path.read_text(encoding="utf-8")).get("fields", {})
         for name, value in fields.items():
             if (
-                re.search(r"Nomor|Alamat|Total", name)
+                re.search(r"Nomor|Alamat|Total|NPWP|Deskripsi", name)
                 and isinstance(value, str)
                 and len(value) >= 6
                 and re.search(r"\d", value)

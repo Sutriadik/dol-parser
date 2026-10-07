@@ -8,7 +8,7 @@ tinggi palsu dan LLM cenderung menyalin nilai contoh (mis. "Bank Mandiri") ke do
 Naikkan PROMPT_VERSION setiap kali prompt diubah agar hasil evaluasi bisa dibandingkan.
 """
 
-PROMPT_VERSION = "extract-2026.09.3"
+PROMPT_VERSION = "extract-2026.10.1"
 
 CONTRACT_EXTRACTION_SYSTEM_PROMPT = """Anda adalah AI Document Extraction Engine untuk dokumen kontrak pengadaan Indonesia dalam berbagai bentuk: Surat Perintah Kerja (SPK), Kontrak/Perjanjian Kerja Sama (PKS), dan Nota/Surat Pesanan.
 
@@ -21,7 +21,7 @@ ATURAN UTAMA:
 
 CATATAN TABEL: baris item/BoQ diambil secara deterministik oleh parser, JANGAN mengeluarkannya.
 Kalau (dan hanya kalau) diminta khusus untuk menyusun/melengkapi baris item, berlaku aturan ini:
-- Pisahkan nomor urut dari deskripsi ("1 Penyediaan Fortigate 200f" -> Nomor "1", Deskripsi "Penyediaan Fortigate 200f").
+- Pisahkan nomor urut dari deskripsi ("1 Penyediaan Router Edge 120x" -> Nomor "1", Deskripsi "Penyediaan Router Edge 120x").
 - Baris ringkasan ("Subtotal", "Grandtotal", "Total A+B") BUKAN item.
 - 'Kategori/Kelompok' diisi nama sub-header tabel (misal "A. CPE License") untuk baris di bawahnya.
 - 'Periode/Durasi', 'Spesifikasi', 'Keterangan', 'Atribut Tambahan' diisi bila kolomnya tersedia.
@@ -85,11 +85,11 @@ CONTOH FORMAT (DATA FIKTIF — JANGAN DISALIN):
 ---
 Input: "...SURAT PERINTAH KERJA Nomor : 045/SPK/LOG-02/2031
 Berdasarkan hasil negosiasi harga pada tanggal 10 Maret 2031 tentang Pengadaan Switch Access dan Jaringan Kampus...
-Nama : Rina Kartika, NPWP: 01.000.013.1-093.000
+Nama : Rina Kartika, NPWP: 02.345.678.9-012.000
 Jabatan : Kepala Divisi Logistik
 Alamat : Gedung Arunika Lt. 3, Jl. Merpati Raya No. 18, Semarang
 Yang dalam hal ini mewakili secara sah : PT SAMUDRA CONTOH NUSANTARA, selanjutnya disebut sebagai PIHAK PERTAMA, memberi perintah kerja Pengadaan Switch Access dan Jaringan Kampus kepada :
-Nama : Bayu Pratama, NPWP: 0211.1642.9944.1000
+Nama : Bayu Pratama, NPWP: 0312.4567.8901.2000
 Jabatan : Direktur Utama
 Alamat : Jl. Kenanga No. 7, Surakarta
 Yang dalam hal ini mewakili secara sah : CV. DATA CONTOH MANDIRI, selanjutnya disebut sebagai PIHAK KEDUA...
@@ -102,8 +102,8 @@ Dibuat di : Semarang, Tanggal : 14 Maret 2031"
 
 Output:
 {
-  "Pihak Pertama": {"Nama Perusahaan": "PT SAMUDRA CONTOH NUSANTARA", "NPWP": "01.000.013.1-093.000", "Nama Representative": "Rina Kartika", "Jabatan": "Kepala Divisi Logistik", "Alamat": "Gedung Arunika Lt. 3, Jl. Merpati Raya No. 18, Semarang"},
-  "Pihak Kedua": {"Nama Perusahaan": "CV. DATA CONTOH MANDIRI", "NPWP": "0211.1642.9944.1000", "Nama Representative": "Bayu Pratama", "Jabatan": "Direktur Utama", "Alamat": "Jl. Kenanga No. 7, Surakarta"},
+  "Pihak Pertama": {"Nama Perusahaan": "PT SAMUDRA CONTOH NUSANTARA", "NPWP": "02.345.678.9-012.000", "Nama Representative": "Rina Kartika", "Jabatan": "Kepala Divisi Logistik", "Alamat": "Gedung Arunika Lt. 3, Jl. Merpati Raya No. 18, Semarang"},
+  "Pihak Kedua": {"Nama Perusahaan": "CV. DATA CONTOH MANDIRI", "NPWP": "0312.4567.8901.2000", "Nama Representative": "Bayu Pratama", "Jabatan": "Direktur Utama", "Alamat": "Jl. Kenanga No. 7, Surakarta"},
   "List Item/Barang": [{"Nomor Item": "1", "Kategori/Kelompok": null, "Deskripsi Item/Barang/Pekerjaan": "Switch Access 24 Port", "Spesifikasi": null, "volume": 4, "unit": "unit", "Periode/Durasi": null, "Harga Satuan": 12000000, "Jumlah Harga": 48000000, "Keterangan": null, "Atribut Tambahan": null}],
   "Nomor Kontrak Kerja": "045/SPK/LOG-02/2031",
   "Nomor Kontrak Internal": null,
