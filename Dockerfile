@@ -1,18 +1,14 @@
-# Open ADE — image untuk menguji mesin OCR di luar macOS (Linux / Windows-WSL2).
+# dol-parser — image service (API + mesin OCR) untuk Linux/Windows-WSL2.
 #
-# Satu berkas untuk dua kebutuhan, dipilih lewat build-arg -- bukan dua Dockerfile yang
-# harus disamakan manual tiap kali berubah:
+# Skema dol-schema (folder sejajar) masuk lewat konteks build bernama, supaya konteks
+# utama tetap folder ini saja. Lewat docker compose sudah otomatis (additional_contexts).
 #
-#   Skema dol-schema (folder sejajar) masuk lewat konteks build bernama, supaya konteks
-#   utama tetap folder ini saja. Lewat docker compose sudah otomatis (additional_contexts).
-#
-#   CPU (bisa di mana saja, termasuk Windows tanpa GPU):
+#   CPU:
 #     docker build -t openade:cpu --build-context dol-schema=../dol-schema .
 #
-#   GPU NVIDIA (ini alasan utama pindah ke Windows: PaddlePaddle tidak punya backend
-#   Metal, jadi di Mac ia selalu CPU. Ambil nama image & perintah wheel yang TEPAT dari
-#   halaman instalasi resmi PaddlePaddle -- versi CUDA berubah-ubah, jadi sengaja tidak
-#   dipatok di sini supaya tidak menyesatkan):
+#   GPU NVIDIA (PaddlePaddle tidak punya backend Metal, jadi hanya di sini ia memakai GPU).
+#   Ambil nama image & perintah wheel yang TEPAT dari halaman instalasi resmi PaddlePaddle --
+#   versi CUDA berubah-ubah, jadi sengaja tidak dipatok di sini:
 #     docker build -t openade:gpu --build-context dol-schema=../dol-schema \
 #       --build-arg BASE_IMAGE=nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 \
 #       --build-arg PADDLE_PKG=paddlepaddle-gpu \

@@ -35,7 +35,7 @@ pasang:  ## Pasang dependensi aplikasi + skema dol-schema dari folder sebelah
 	@test -d ../dol-schema || (echo "✗ ../dol-schema tidak ada: clone repo dol-schema sejajar folder ini"; exit 1)
 	$(PIP) install -e ../dol-schema
 
-pasang-dev:  ## Pasang dependensi aplikasi + pengembangan (pytest, jupyter)
+pasang-dev:  ## Pasang dependensi aplikasi + pengembangan (pytest, ruff)
 	$(PIP) install -r requirements-dev.txt
 
 # --------------------------------------------------------------------------- pemeriksaan

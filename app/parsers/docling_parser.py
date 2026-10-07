@@ -93,7 +93,7 @@ class _OcrEngine:
 _TESSERACT_LANG = ["ind", "eng"]
 _OCR_ENGINES = {
     "mac": ("OcrMacOptions", {}, "Apple Vision (hanya macOS)"),
-    # EasyOCR dibuang 2026-10-07. Di benchmark 3 dokumen (docs/PERBANDINGAN_OCR.md) akurasinya
+    # EasyOCR dibuang 2026-10-07. Di benchmark 3 dokumen akurasinya
     # 47,3% vs RapidOCR 85,5%, dan RapidOCR sudah menutup kebutuhan lintas platform.
     # OCR_ENGINE=easyocr kini ditolak sebagai nilai tak dikenal.
     # Varian CLI memanggil biner `tesseract` langsung, jadi tidak perlu kompilasi tesserocr.

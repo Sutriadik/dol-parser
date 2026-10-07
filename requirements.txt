@@ -15,8 +15,8 @@ rapidocr-onnxruntime>=1.4.0      # default; ONNX, CPU, lintas platform
 ocrmac>=1.0.0; sys_platform == "darwin"
 
 # PaddleOCR. CATATAN untuk mesin ber-GPU NVIDIA: ganti `paddlepaddle` di bawah
-# dengan `paddlepaddle-gpu` versi yang cocok dengan CUDA Anda (lihat
-# docs/UJI_WINDOWS_DOCKER.md). Wheel CPU dan GPU tidak boleh terpasang bersamaan.
+# dengan `paddlepaddle-gpu` versi yang cocok dengan CUDA Anda (lihat kepala
+# Dockerfile). Wheel CPU dan GPU tidak boleh terpasang bersamaan.
 paddleocr>=2.7.0,<3.0
 paddlepaddle>=2.5.0
 
@@ -42,4 +42,3 @@ python-multipart>=0.0.9
 # - pydantic-ai     (menarik google-genai, openai, logfire, dll.)
 # - pdfplumber      (PyMuPDF sudah dipakai untuk teks native & profiling)
 # - requests, httpx (httpx tetap terpasang sebagai dependency ollama)
-# Tools notebook (jupyter) sebaiknya di requirements-dev.txt terpisah.

@@ -139,7 +139,7 @@ kata "terverifikasi".
 | `app/evidence/` | menautkan tiap field ke kutipan & bounding box asalnya |
 | `app/companion/` | pemeta hasil ekstraksi → tabel dol-schema, pusher NocoDB, penyusun draf BAST |
 | `eval/` | harness akurasi terhadap `eval/golden/` |
-| `scripts/` | `companion.py` (payload & push), `nocodb_setup.py` (base & cek), benchmark OCR |
+| `scripts/` | `companion.py` (payload & push), `nocodb_setup.py` (base & cek), `cek_ocr.py` (mesin OCR yang hidup), `buat_golden.py` (rangka golden) |
 
 ---
 
@@ -147,7 +147,7 @@ kata "terverifikasi".
 
 ```bash
 .venv311/bin/pip install -r requirements-dev.txt
-make test                     # 342 tes
+make test                     # seluruh tes
 make eval                     # akurasi vs golden set
 make cek-nocodb               # sambungan & tableId NocoDB
 make cek-skema                # tabel NocoDB vs dol-schema, kolom per kolom
@@ -162,8 +162,7 @@ OCR_ENGINE=tesseract .venv311/bin/python run.py "dokumen.pdf"
 
 Pilihan: `rapidocr` (default), `mac`, `tesseract`, `paddle`, `auto`.
 Default sengaja `rapidocr`, bukan `mac`: Apple Vision hanya ada di macOS, jadi akurasi
-yang diukur dengannya tidak bisa ditepati server Linux. Perbandingan lima mesin:
-[docs/PERBANDINGAN_OCR.md](docs/PERBANDINGAN_OCR.md).
+yang diukur dengannya tidak bisa ditepati server Linux.
 
 ### Menambah golden document
 
@@ -192,9 +191,6 @@ make eval
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | **ada yang error?** mulai dari sini |
 | [docs/SETUP_NOCODB.md](docs/SETUP_NOCODB.md) | membuat base NocoDB dari dol-schema & mengirim data |
 | [docs/INTEGRASI_N8N.md](docs/INTEGRASI_N8N.md) | rangkaian node n8n → FastAPI → NocoDB |
-| [docs/BASELINE.md](docs/BASELINE.md) | rangka pengukuran baseline (wajib diisi) |
-| [docs/PERBANDINGAN_OCR.md](docs/PERBANDINGAN_OCR.md) | benchmark 5 mesin OCR |
-| [docs/JALANKAN_DI_WINDOWS.md](docs/JALANKAN_DI_WINDOWS.md) | menjalankan di luar macOS |
 | `../dol-schema/docs/WORKSHOP_SKEMA.md` | keputusan skema yang masih terbuka (bertiga) |
 
 ---

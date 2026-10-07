@@ -14,7 +14,3 @@ ruff>=0.6
 # disebut eksplisit di sini supaya tes tidak diam-diam bergantung pada paket
 # yang kebetulan terbawa.
 httpx>=0.27
-
-# Notebook eksplorasi (lokal, tidak di repo). Tidak dibutuhkan untuk menjalankan service.
-jupyterlab>=4.0
-ipykernel>=6.29

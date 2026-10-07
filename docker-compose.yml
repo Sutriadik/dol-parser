@@ -1,12 +1,7 @@
-# Open ADE — menjalankan service dan menguji mesin OCR.
+# dol-parser — menjalankan API sebagai service.
 #
-#   docker compose up -d api                   # jalankan API (profil default)
-#   docker compose run --rm ocr-cpu            # cek mesin OCR apa saja yang hidup
-#   docker compose run --rm ocr-gpu            # sama, tapi image ber-CUDA
-#
-# Service benchmark ada di profil `bench` supaya `docker compose up` tidak ikut
-# menjalankannya. Jalankan satu saja saat mengukur waktu: dua container yang berebut CPU
-# membuat angka "Waktu Proses Rata-rata" tidak ada artinya.
+#   docker compose up -d api
+#   docker compose run --rm api python3 scripts/cek_ocr.py   # mesin OCR apa saja yang hidup
 
 services:
   # ---------------------------------------------------------------------------- API
@@ -51,56 +46,6 @@ services:
       retries: 3
     restart: unless-stopped
 
-  ocr-cpu:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      additional_contexts:
-        dol-schema: ../dol-schema
-    image: openade:cpu
-    profiles: ["bench"]
-    volumes:
-      # Dokumen uji & hasil: dipetakan supaya keluarannya bisa dibaca dari host dan
-      # dibandingkan langsung dengan hasil di Mac.
-      - ./sample_pdfs:/app/sample_pdfs:ro
-      - ./storage/outputs:/app/storage/outputs
-      - ./eval:/app/eval
-      # Model OCR (ratusan MB) disimpan di volume, bukan di dalam image: kalau ikut
-      # image, tiap rebuild mengunduhnya lagi.
-      - ocr-models:/models
-    environment:
-      OCR_ENGINE: rapidocr
-      LOG_LEVEL: INFO
-
-  ocr-gpu:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      additional_contexts:
-        dol-schema: ../dol-schema
-      args:
-        # Ganti dengan versi CUDA yang cocok dengan driver NVIDIA Anda. Nilai di bawah
-        # contoh; yang mengikat adalah halaman instalasi resmi PaddlePaddle.
-        BASE_IMAGE: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
-        PADDLE_PKG: paddlepaddle-gpu
-        PADDLE_INDEX: https://www.paddlepaddle.org.cn/packages/stable/cu126/
-    image: openade:gpu
-    profiles: ["bench"]
-    volumes:
-      - ./sample_pdfs:/app/sample_pdfs:ro
-      - ./storage/outputs:/app/storage/outputs
-      - ./eval:/app/eval
-      - ocr-models:/models
-    environment:
-      OCR_ENGINE: rapidocr
-      LOG_LEVEL: INFO
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
 volumes:
   ocr-models:

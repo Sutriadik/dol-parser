@@ -69,9 +69,8 @@ addopts = "-q --tb=short"
 target-version = "py311"
 line-length = 100
 extend-exclude = [
-    "notebooks",
-    # SEMENTARA: berkas ini punya perubahan yang belum di-commit di checkout utama.
-    # Hapus baris ini setelah perubahannya di-commit, lalu jalankan `make rapi`.
+    # Belum dirapikan ke PEP 8 (20 temuan ruff, 4 tidak bisa diperbaiki otomatis).
+    # Rapikan tersendiri lalu hapus baris ini -- jangan dicampur perubahan perilaku.
     "app/parsers/image_enhancer.py",
 ]
 

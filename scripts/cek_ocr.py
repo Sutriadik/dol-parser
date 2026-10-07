@@ -104,7 +104,7 @@ def main() -> int:
         print("Tidak ada mesin OCR yang hidup — dokumen hasil scan tidak akan terbaca sama sekali.")
         return 1
     print("\nLangkah berikutnya:")
-    print("  python bench_ocr.py --consistency paddle --doc spk   # parse saja, tanpa LLM")
+    print("  python run.py dokumen.pdf   # satu dokumen, ujung ke ujung")
     return 0
 
 
