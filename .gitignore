@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+.venv311/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary uploads
+storage/temp_uploads/*
+!storage/temp_uploads/.gitkeep
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+.env.local
+
+# Data klien -- JANGAN pernah masuk git (repo ada di GitHub).
+# Kontrak asli dan semua turunannya (teks OCR, hasil ekstraksi, golden set)
+# dipindahkan antar-mesin lewat buildAParser-data.zip, bukan lewat git.
+sample_pdfs/
+storage/outputs/
+# Inventaris proyek memuat nama klien & nama berkas kontrak -- data klien.
+storage/data_project_*.json
+storage/uploads/
+outputs/
+Hasil */
+eval/golden/
+eval/baseline_v1/
+eval/reports/
+eval/compare/
+*.pdf
+*.docx

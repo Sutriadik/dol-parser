@@ -1,0 +1,19 @@
+# Konteks build. Tanpa ini, 2,9 GB dikirim ke daemon Docker tiap build.
+.venv311/
+.venv/
+.git/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+storage/outputs/
+notebooks/
+nocodb-data/
+
+# Dokumen uji SENGAJA tidak ikut ke dalam image: isinya kontrak asli bertanda tangan.
+# Image bisa terdorong ke registry dan ikut terbawa ke mana-mana. Di docker-compose.yml
+# folder ini dipasang sebagai bind mount read-only, jadi container tetap bisa membacanya
+# tanpa dokumennya menjadi bagian dari image.
+sample_pdfs/
+"Hasil Extract Landing AI/"
+"Data Project BUT/"

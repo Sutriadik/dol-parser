@@ -1,0 +1,45 @@
+# Core Document Parsing & Layout Analysis
+docling>=2.0.0
+pymupdf>=1.24.0
+pillow>=10.0.0
+
+# --- Mesin OCR -------------------------------------------------------------
+# Sebelumnya HANYA paddle yang tercantum di sini, padahal default aplikasi adalah
+# RapidOCR (app/config.py: OCR_ENGINE="rapidocr"). Akibatnya instalasi bersih dari
+# berkas ini tidak punya mesin OCR default-nya sama sekali -- baru ketahuan saat
+# menyiapkan image Docker, bukan saat dipakai.
+rapidocr-onnxruntime>=1.4.0      # default; ONNX, CPU, lintas platform
+
+# Apple Vision: macOS saja. Penanda platform dipasang supaya `pip install` di
+# Linux/Windows tidak gagal gara-gara paket yang memang tidak ada di sana.
+ocrmac>=1.0.0; sys_platform == "darwin"
+
+# PaddleOCR. CATATAN untuk mesin ber-GPU NVIDIA: ganti `paddlepaddle` di bawah
+# dengan `paddlepaddle-gpu` versi yang cocok dengan CUDA Anda (lihat
+# docs/UJI_WINDOWS_DOCKER.md). Wheel CPU dan GPU tidak boleh terpasang bersamaan.
+paddleocr>=2.7.0,<3.0
+paddlepaddle>=2.5.0
+
+# Tesseract TIDAK ada paketnya di sini: yang dipakai biner `tesseract` sistem
+# (Docling memanggilnya lewat CLI). Di Debian/Ubuntu: tesseract-ocr tesseract-ocr-ind.
+
+# Skema data bersama: repo dol-schema (folder sejajar ../dol-schema). WAJIB -- app/companion
+# dan API mengimpornya. Sengaja tidak ditulis di sini sebagai `-e ../dol-schema`, karena
+# berkas ini juga dipakai build Docker yang konteksnya tidak memuat folder sebelah.
+# Pasang lewat `make pasang`, atau: pip install -e ../dol-schema
+# Docker: lihat --build-context di Dockerfile. CI: lihat .github/workflows/ci.yml.
+
+# Schema & AI Extraction Layer
+pydantic>=2.9.0
+ollama>=0.6.0
+
+# API & Web Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Dihapus karena tidak di-import di kode mana pun:
+# - pydantic-ai     (menarik google-genai, openai, logfire, dll.)
+# - pdfplumber      (PyMuPDF sudah dipakai untuk teks native & profiling)
+# - requests, httpx (httpx tetap terpasang sebagai dependency ollama)
+# Tools notebook (jupyter) sebaiknya di requirements-dev.txt terpisah.

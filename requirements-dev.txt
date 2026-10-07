@@ -1,0 +1,20 @@
+# Dependensi pengembangan. TIDAK dipasang di image produksi.
+#
+#     .venv311/bin/pip install -r requirements-dev.txt
+#
+# Dipisah dari requirements.txt karena Jupyter menarik puluhan paket yang tidak
+# pernah di-import kode aplikasi, dan itu ikut membesarkan image Docker.
+
+-r requirements.txt
+
+pytest>=8.0
+# Gaya kode PEP 8 (lint + format). `make rapi` / `make cek-gaya`.
+ruff>=0.6
+# TestClient FastAPI butuh httpx; ia sudah masuk lewat dependency ollama, tapi
+# disebut eksplisit di sini supaya tes tidak diam-diam bergantung pada paket
+# yang kebetulan terbawa.
+httpx>=0.27
+
+# Notebook eksplorasi (lokal, tidak di repo). Tidak dibutuhkan untuk menjalankan service.
+jupyterlab>=4.0
+ipykernel>=6.29

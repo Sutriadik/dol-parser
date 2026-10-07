@@ -1,0 +1,106 @@
+# Open ADE — menjalankan service dan menguji mesin OCR.
+#
+#   docker compose up -d api                   # jalankan API (profil default)
+#   docker compose run --rm ocr-cpu            # cek mesin OCR apa saja yang hidup
+#   docker compose run --rm ocr-gpu            # sama, tapi image ber-CUDA
+#
+# Service benchmark ada di profil `bench` supaya `docker compose up` tidak ikut
+# menjalankannya. Jalankan satu saja saat mengukur waktu: dua container yang berebut CPU
+# membuat angka "Waktu Proses Rata-rata" tidak ada artinya.
+
+services:
+  # ---------------------------------------------------------------------------- API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      additional_contexts:
+        dol-schema: ../dol-schema
+    image: openade:cpu
+    # Dijalankan sebagai service, bukan perintah cek OCR bawaan image.
+    command: ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Ollama jalan di HOST, bukan di dalam container: model 4.7 GB tidak ikut ke image,
+      # dan di macOS hanya proses host yang bisa memakai GPU Metal.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # NOCODB_URL di .env (localhost:8080) di dalam container menunjuk container ini
+      # sendiri, jadi push gagal "connection refused". NocoDB diakses lewat port host.
+      NOCODB_URL: ${NOCODB_URL_DARI_DOCKER:-http://host.docker.internal:8080}
+      OCR_ENGINE: rapidocr
+      LOG_LEVEL: INFO
+    extra_hosts:
+      # Diperlukan di Linux; di Docker Desktop (Mac/Windows) sudah tersedia sendiri.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Hasil parsing/ekstraksi bisa dibaca dari host tanpa masuk ke container.
+      - ./storage:/app/storage
+      - ocr-models:/models
+    healthcheck:
+      # /health tidak butuh API key, justru supaya bisa dipakai di sini.
+      test: ["CMD", "python3", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      # Muat model pertama kali lambat; tanpa start_period container ditandai unhealthy
+      # sebelum sempat siap.
+      start_period: 180s
+      retries: 3
+    restart: unless-stopped
+
+  ocr-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      additional_contexts:
+        dol-schema: ../dol-schema
+    image: openade:cpu
+    profiles: ["bench"]
+    volumes:
+      # Dokumen uji & hasil: dipetakan supaya keluarannya bisa dibaca dari host dan
+      # dibandingkan langsung dengan hasil di Mac.
+      - ./sample_pdfs:/app/sample_pdfs:ro
+      - ./storage/outputs:/app/storage/outputs
+      - ./eval:/app/eval
+      # Model OCR (ratusan MB) disimpan di volume, bukan di dalam image: kalau ikut
+      # image, tiap rebuild mengunduhnya lagi.
+      - ocr-models:/models
+    environment:
+      OCR_ENGINE: rapidocr
+      LOG_LEVEL: INFO
+
+  ocr-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      additional_contexts:
+        dol-schema: ../dol-schema
+      args:
+        # Ganti dengan versi CUDA yang cocok dengan driver NVIDIA Anda. Nilai di bawah
+        # contoh; yang mengikat adalah halaman instalasi resmi PaddlePaddle.
+        BASE_IMAGE: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
+        PADDLE_PKG: paddlepaddle-gpu
+        PADDLE_INDEX: https://www.paddlepaddle.org.cn/packages/stable/cu126/
+    image: openade:gpu
+    profiles: ["bench"]
+    volumes:
+      - ./sample_pdfs:/app/sample_pdfs:ro
+      - ./storage/outputs:/app/storage/outputs
+      - ./eval:/app/eval
+      - ocr-models:/models
+    environment:
+      OCR_ENGINE: rapidocr
+      LOG_LEVEL: INFO
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  ocr-models:
