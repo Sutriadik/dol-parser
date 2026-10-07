@@ -8,6 +8,40 @@ Ini bagian **AI Engineer** dari Delivery Ops Layer — lapisan otomasi yang berd
 sebelah MyBhakti, bukan di dalamnya. Dua komponen lain dipegang rekan setim:
 n8n/numbering (RPA Engineer) dan evidence/ODK (Network Engineer).
 
+## Kenapa sistem ini ada
+
+Invoice ke pelanggan baru bisa terbit setelah **BAST Pelanggan** diteken. Hari ini BAST sering
+terlambat, walaupun barang sudah terpasang dan berfungsi. Sebabnya: data kontrak diketik ulang
+di beberapa dokumen, SPH vendor yang formatnya berbeda-beda diketik ulang jadi tabel banding,
+dan syarat lampiran dari kontrak baru ketahuan kurang saat BAST mau ditandatangani. Selama
+BAST tertahan, uang perusahaan ikut tertahan.
+
+```
+Barang terpasang → Evidence & lampiran kontrak → BAST diteken → Invoice → Uang masuk
+                    ↑ macet di sini
+```
+
+Repo ini menangani bagian hulunya: kontrak dibaca **sekali** di awal proyek, SPH dibaca setiap
+penawaran masuk, dan hasilnya disimpan di satu tempat yang bisa dipakai tiga tim. PM tetap
+memeriksa setiap field sebelum nilainya dipakai dokumen lain. Dampaknya belum diukur: angka
+awal (menit mengetik ulang per SPH, jumlah BAST yang dikembalikan) belum dikumpulkan.
+
+## Teknologi
+
+| Lapisan | Dipakai | Catatan |
+|---|---|---|
+| Bahasa | Python 3.11 | |
+| API | FastAPI + uvicorn | antrian job asinkron, satu dokumen pada satu waktu |
+| Parsing PDF | Docling, PyMuPDF | PyMuPDF untuk teks native & profiling |
+| OCR | RapidOCR (default) | alternatif: Apple Vision (`mac`), Tesseract, PaddleOCR |
+| LLM | Qwen 2.5 7B (`qwen2.5:7b`) lewat Ollama | jalan lokal, dokumen tidak keluar dari mesin |
+| Skema ekstraksi | Pydantic v2 | per jenis dokumen, di `app/schemas/` |
+| Skema database | repo `dol-schema`, versi `companion-2026.10.4` | dipasang editable dari folder sebelah |
+| Penyimpanan | NocoDB (API v2) | tempat PM mengonfirmasi per field |
+| Orkestrasi | n8n | dipegang RPA Engineer, di luar repo ini |
+
+Alur di dalam pipeline:
+
 ```
 PDF ──> profiling ──> parsing+OCR ──> klasifikasi ──> ekstraksi LLM ──> validasi ──> bukti
                                                                                        │
@@ -85,6 +119,37 @@ curl -X POST localhost:8000/api/v1/jobs \
 dan **sama dengan kunci baris Dokumen di NocoDB** (`content_hash`). Kirim PDF yang sama dua
 kali → baris yang sama diperbarui, bukan baris kembar. Rangkaian node lengkapnya:
 **[docs/INTEGRASI_N8N.md](docs/INTEGRASI_N8N.md)**.
+
+### Alur ujung ke ujung
+
+```mermaid
+flowchart TB
+    PDF["PDF Kontrak / SPK / SPH"] --> N8N["n8n"]
+    N8N -- "POST /api/v1/jobs" --> API["FastAPI<br/>dol-parser"]
+    API -- "202: job_id, document_id" --> N8N
+
+    subgraph pipeline ["Pipeline, 160–313 detik per dokumen"]
+        P1["Profiling"] --> P2["Docling + RapidOCR"]
+        P2 --> P3["Klasifikasi"]
+        P3 --> P4["Ekstraksi LLM<br/>qwen2.5:7b"]
+        P4 --> P5["Validasi aturan bisnis"]
+        P5 --> P6["Bukti per field"]
+        P6 --> P7["Pemeta companion<br/>ke tabel dol-schema"]
+    end
+
+    API --> P1
+    P7 -- "callback: companion_payload" --> N8N
+    N8N -- "POST /api/v2/tables/.../records" --> DB[("NocoDB")]
+    P7 -. "jalur alternatif: NOCODB_PUSH_ENABLED=1<br/>validate_payload dari dol-schema" .-> DB
+    DB --> PM["PM mengonfirmasi per field"]
+```
+
+dol-schema ikut di dua titik. Pemeta companion memakai nama tabel & kolomnya untuk menyusun
+`companion_payload`, dan pusher bawaan (`NOCODB_PUSH_ENABLED=1` atau `scripts/companion.py
+--push`) menjalankan `validate_payload` sebelum mengirim. **Di jalur n8n, payload tidak
+divalidasi dol-schema sebelum masuk NocoDB**: n8n meneruskannya apa adanya. Siapa yang
+seharusnya memvalidasi di jalur itu (FastAPI sebelum callback, atau n8n membaca
+`generated/schema.json`) belum diputuskan bersama RPA Engineer.
 
 ---
 
