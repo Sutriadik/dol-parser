@@ -467,6 +467,70 @@ def test_eval_compare_rules():
     assert compare("X", None)[0] == "missing"
 
 
+def _laporan(*baris_per_dok):
+    return {
+        "results": [
+            {"document": f"d{i}.pdf", "golden_terverifikasi": True, "rows": rows}
+            for i, rows in enumerate(baris_per_dok)
+        ]
+    }
+
+
+def _baris(field, verdict, false_acceptance=False, critical=False):
+    return {
+        "field": field,
+        "verdict": verdict,
+        "false_acceptance": false_acceptance,
+        "critical": critical,
+        "expected": "x",
+        "predicted": "y",
+    }
+
+
+def test_banding_eval_menandai_field_yang_turun_walau_rata_rata_naik():
+    """
+    Rata-rata bisa naik sambil satu field kritis rusak -- persis pola eval 2026-10-07
+    (lenient naik, kritis turun). Perbandingan harus per field, bukan per angka ringkasan.
+    """
+    from eval.run_eval import bandingkan_laporan
+
+    lama = _laporan(
+        [
+            _baris("Nomor", "exact", critical=True),
+            _baris("Lokasi", "wrong"),
+            _baris("Bank", "wrong"),
+        ]
+    )
+    baru = _laporan(
+        [
+            _baris("Nomor", "wrong", critical=True),
+            _baris("Lokasi", "exact"),
+            _baris("Bank", "exact"),
+        ]
+    )
+    beda = bandingkan_laporan(lama, baru)
+    assert [(b["document"], b["field"]) for b in beda["turun"]] == [("d0.pdf", "Nomor")]
+    assert beda["turun"][0]["critical"] is True
+    assert {b["field"] for b in beda["naik"]} == {"Lokasi", "Bank"}
+
+
+def test_banding_eval_menandai_nilai_salah_yang_baru_lolos_sebagai_bukti_kuat():
+    from eval.run_eval import bandingkan_laporan
+
+    lama = _laporan([_baris("Nilai", "wrong")])
+    baru = _laporan([_baris("Nilai", "wrong", false_acceptance=True)])
+    assert [b["field"] for b in bandingkan_laporan(lama, baru)["lolos_salah_baru"]] == ["Nilai"]
+
+
+def test_banding_eval_mengabaikan_dokumen_yang_tidak_ada_di_kedua_laporan():
+    from eval.run_eval import bandingkan_laporan
+
+    lama = _laporan([_baris("Nomor", "exact")])
+    baru = _laporan([_baris("Nomor", "exact")], [_baris("Nomor", "wrong")])
+    beda = bandingkan_laporan(lama, baru)
+    assert beda["turun"] == [] and beda["dokumen_tidak_terbanding"] == ["d1.pdf"]
+
+
 def test_engine_refuses_llm_extraction_on_image_only_parse():
     from app.schemas.common import DocumentStructure, LandingAIParsedResponse, ParseMetadata
     from app.services.engine import OpenADEEngine, ParsingError
