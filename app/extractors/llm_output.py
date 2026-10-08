@@ -92,7 +92,7 @@ def cap_string_lengths(schema: dict[str, Any]) -> dict[str, Any]:
     Beri `maxLength` pada setiap field teks di skema format Ollama.
 
     Ollama menegakkan skema lewat grammar, jadi batas ini benar-benar memotong keluaran.
-    Tanpanya satu field bisa berulang tanpa henti: pada KONTRAK_HALF_SIGNED_ST_108 model
+    Tanpanya satu field bisa berulang tanpa henti: pada kontrak pindaian 16 halaman model
     menulis alamat lalu "0812345678901234567890..." sampai kuota 4.096 token habis, JSON
     terpotong, dan seluruh dokumen gagal setelah 325 detik. Batas diambil dari 52 hasil
     ekstraksi nyata: 210 dari 223 field tidak pernah melebihi 200 karakter.
@@ -161,7 +161,7 @@ def empty_result(schema_class: type) -> BaseModel:
     return schema_class.model_validate(empty(schema_class))
 
 
-# ------------------------------------------------------------------ targeted clause
+# targeted clause
 def only_null_keys(templates: dict[str, Any], null_fields: list[str]) -> dict[str, Any]:
     """
     Buang kunci template yang sudah terisi, tapi HANYA di level teratas.

@@ -349,17 +349,9 @@ class LayoutParser:
         return _render_regions(regions)
 
 
-# ============================================================================
-# Perender markdown untuk region PP-Structure
-# ============================================================================
-#
-# Kenapa label region TIDAK dipakai mentah-mentah: pada SPK ATS Oracle, PP-Structure
-# memberi label "footer" pada "3. WAKTU PELAKSANAAN" dan "Jangka waktu akses selama 29
-# Mei 2026..." (y=0,72-0,78), dan label "header" pada "Nama Budi Santoso Wijaya" /
-# "Jabatan : Direktur..." (y=0,19-0,35). Kalau semua "footer" dibungkus komentar seperti
-# di jalur Docling, isi kontrak justru tersembunyi. Footer asli di dokumen itu semuanya
-# di y >= 0,86. Jadi label hanya dipercaya kalau POSISINYA juga cocok, dan jenis baris
-# ditentukan dari isi teksnya.
+# Perender markdown untuk region PP-Structure. Label region tidak dipercaya mentah-mentah:
+# PP-Structure bisa melabeli isi kontrak sebagai "footer"/"header". Label hanya dipakai
+# bila posisinya juga cocok (footer asli di y >= 0,86); jenis baris ditentukan dari teksnya.
 
 FOOTER_ZONE_Y = 0.85  # footer asli di dokumen uji mulai y=0,86
 HEADER_ZONE_Y = 0.12  # kop surat; judul dokumen ("SURAT PERINTAH KERJA") ada di sini

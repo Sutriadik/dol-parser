@@ -2,8 +2,8 @@
 Nominal yang ditulis sebagai angka DAN terbilang yang sama lebih dipercaya dari tebakan LLM
 -- tetapi hanya dipakai untuk menambal nilai yang tidak tertulis di dokumen.
 
-Kasus nyata ST_108: dokumen menulis Rp 738.150.000 beserta terbilangnya, LLM mengembalikan
-1.130.000.000 yang tidak ada di dokumen.
+Kasus nyata (kontrak pindaian dua salinan): dokumen menulis nilai kontrak beserta terbilangnya,
+LLM mengembalikan 1.130.000.000 yang tidak ada di dokumen.
 """
 
 from types import SimpleNamespace
@@ -12,8 +12,8 @@ from app.extractors.deterministic.numbers import confirmed_amounts
 from app.extractors.ollama_client import OllamaExtractor
 
 PASAL_6 = (
-    "Nilai harga sebesar Rp... 738.150.000,- (Tujuh Ratus Tiga Puluh Delapan Juta Seratus "
-    "Lima Puluh Ribu Rupiah) harga sudah termasuk PPN."
+    "Nilai harga sebesar Rp... 642.375.000,- (Enam Ratus Empat Puluh Dua Juta Tiga Ratus "
+    "Tujuh Puluh Lima Ribu Rupiah) harga sudah termasuk PPN."
 )
 
 
@@ -24,20 +24,20 @@ def _fix(nilai, teks):
 
 
 def test_nominal_terkonfirmasi_terbilang_ditemukan():
-    assert confirmed_amounts(PASAL_6) == [738150000.0]
+    assert confirmed_amounts(PASAL_6) == [642375000.0]
 
 
 def test_terbilang_yang_tidak_cocok_tidak_dipercaya():
-    teks = "sebesar Rp 738.150.000,- (Tujuh Ratus Juta Rupiah)"
+    teks = "sebesar Rp 642.375.000,- (Enam Ratus Juta Rupiah)"
     assert confirmed_amounts(teks) == []
 
 
 def test_nilai_karangan_llm_diganti():
-    assert _fix(1_130_000_000.0, PASAL_6) == 738_150_000.0
+    assert _fix(1_130_000_000.0, PASAL_6) == 642_375_000.0
 
 
 def test_nilai_kosong_diisi():
-    assert _fix(None, PASAL_6) == 738_150_000.0
+    assert _fix(None, PASAL_6) == 642_375_000.0
 
 
 def test_nilai_llm_yang_tertulis_di_dokumen_tidak_diganti():

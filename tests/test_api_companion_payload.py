@@ -90,7 +90,7 @@ def test_push_tanpa_payload_companion_ditolak(monkeypatch):
     assert e.value.status_code == 422
 
 
-# ---------------------------------------------------------------- push dari jalur /jobs
+# push dari jalur /jobs
 # n8n memakai /jobs (asinkron). Push ke NocoDB harus bisa diminta dari sana juga, dan push
 # yang gagal tidak boleh membuang hasil ekstraksi.
 def _job_uji(tmp_path, push):
@@ -165,7 +165,7 @@ def test_push_diminta_saat_dimatikan_ditolak_sebelum_antri(monkeypatch):
     assert antrian.list_jobs() == []
 
 
-# ---------------------------------------------------------------- versi dol-schema
+# versi dol-schema
 # dol-schema dipasang dari folder sejajar tanpa versi terkunci; kode ini harus menolak jalan
 # dengan pesan jelas bila versinya bukan yang dipahami pemeta.
 def test_versi_terpasang_sama_dengan_yang_diharapkan():

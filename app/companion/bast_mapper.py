@@ -79,7 +79,7 @@ def derive_roles_and_direction(
        `customer` (kita -> pelanggan); BUT menerima -> `vendor` (briefing hlm. 10).
 
     Versi pertama fungsi ini menurunkan arah langsung dari posisi BUT, dan itu salah:
-    pada BAST ATS Oracle, BUT ada di Pihak Kedua tetapi menyerahkan, sehingga arahnya
+    pada BAST lisensi perangkat lunak, BUT ada di Pihak Kedua tetapi menyerahkan, sehingga arahnya
     terbaca `vendor` padahal seharusnya `customer`.
     """
     handover_side = detect_handover_party(markdown)

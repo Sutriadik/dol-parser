@@ -188,11 +188,8 @@ def build_field_evidence(
         if has_error:
             status = FieldStatus.CONFLICT
         elif match is None:
-            # Nilai terisi tapi tidak ketemu di satu blok pun. Dulu ini dilebur ke
-            # REVIEW_REQUIRED bersama "bukti lemah" dan "ada rule warning", padahal
-            # penyebabnya berbeda jauh: nilai yang tidak ada di dokumen hampir selalu
-            # karangan model, dan itu justru yang paling perlu dilihat PM lebih dulu.
-            # Memisahkannya membuat antrean review bisa diurutkan berdasar risiko.
+            # Terisi tapi tidak ditemukan di blok mana pun: hampir selalu karangan model. Dipisah
+            # dari REVIEW_REQUIRED supaya antrean PM bisa diurutkan berdasar risiko.
             status = FieldStatus.UNSUPPORTED
         elif has_warning:
             status = FieldStatus.REVIEW_REQUIRED

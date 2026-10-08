@@ -43,7 +43,7 @@ def _kirim(client, nama="SPK.pdf", isi=PDF, **form):
     )
 
 
-# --------------------------------------------------------------------- autentikasi
+# autentikasi
 def test_tanpa_api_key_terbuka_saat_env_kosong(client, monkeypatch):
     """Default pengembangan: OPENADE_API_KEY kosong = tidak ada autentikasi."""
     monkeypatch.setattr(config, "API_KEY", "")
@@ -77,7 +77,7 @@ def test_health_tetap_terbuka_walau_api_key_aktif(client, monkeypatch):
     assert client.get("/api/v1/health").status_code == 200
 
 
-# --------------------------------------------------------------------- validasi unggahan
+# validasi unggahan
 def test_format_tidak_didukung_ditolak(client):
     r = client.post(
         "/api/v1/jobs", files={"file": ("data.exe", io.BytesIO(b"MZ"), "application/octet-stream")}
@@ -93,7 +93,7 @@ def test_berkas_melebihi_batas_ditolak_413(client, monkeypatch):
     assert "melebihi batas" in r.json()["detail"]
 
 
-# --------------------------------------------------------------------- siklus hidup job
+# siklus hidup job
 def test_submit_membalas_seketika_dengan_document_id(client):
     """
     Inti desainnya: n8n mendapat document_id SEBELUM dokumen diproses, jadi ia bisa
@@ -160,7 +160,7 @@ def test_daftar_job_bisa_disaring_per_document_id(client):
     assert "stats" in r.json()
 
 
-# --------------------------------------------------------------------- CORS
+# CORS
 def test_cors_tidak_lagi_wildcard():
     """
     `allow_origins=["*"]` bersama `allow_credentials=True` ditolak spesifikasi CORS dan
@@ -170,7 +170,7 @@ def test_cors_tidak_lagi_wildcard():
     assert config.cors_origins()
 
 
-# --------------------------------------------------------------------- mode produksi
+# mode produksi
 def _job(**k):
     isian = {
         "job_id": "j1",
@@ -245,7 +245,7 @@ def test_galat_job_di_produksi_tidak_membocorkan_isi(monkeypatch):
     assert "j1" in str(info.value)
 
 
-# --------------------------------------------------------------------- callback_url
+# callback_url
 @pytest.mark.parametrize("url", ["file:///etc/passwd", "ftp://n8n.lokal/hook", "n8n.lokal/hook"])
 def test_callback_selain_http_ditolak(client, url):
     r = _kirim(client, callback_url=url)
@@ -312,7 +312,7 @@ def test_callback_ditandatangani_hmac_bila_secret_diisi(monkeypatch):
     assert json.loads(terkirim["content"])["job_id"] == "j1"
 
 
-# --------------------------------------------------------------------- retensi unggahan
+# retensi unggahan
 def test_unggahan_yatim_dihapus_saat_server_naik():
     """
     Antrean job ada di memori. Bila server mati saat job masih antre, PDF kontrak yang sudah

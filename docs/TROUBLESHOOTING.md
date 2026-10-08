@@ -1,7 +1,7 @@
 # Troubleshooting
 
-Masalah yang **benar-benar pernah terjadi** di proyek ini, disusun menurut gejala yang
-terlihat. Cari pesan error Anda di halaman ini (Cmd+F / Ctrl+F) — pesan ditulis persis
+Masalah yang **pernah terjadi** di proyek ini, disusun menurut gejala yang
+terlihat. Cari pesan error Anda di halaman ini (Cmd+F / Ctrl+F); pesan ditulis persis
 seperti yang muncul.
 
 Semua perintah dijalankan dari folder `dol-parser/`.
@@ -28,7 +28,7 @@ tidak berjalan.
 | NocoDB | setelah Docker jalan: `docker start dol-nocodb` |
 
 Ollama dan Docker **tidak menyala sendiri** setelah laptop restart atau tidur lama. Data
-NocoDB aman — tersimpan di volume Docker, tidak hilang saat container mati.
+NocoDB aman: tersimpan di volume Docker, tidak hilang saat container mati.
 
 ---
 
@@ -41,7 +41,7 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 - **Penyebab:** aplikasi Ollama tidak berjalan.
 - **Perbaikan:** `open -a Ollama`, lalu cek `curl http://127.0.0.1:11434/api/tags`.
-  Dokumen yang gagal harus diproses ulang — tidak ada yang tersimpan setengah jalan.
+  Dokumen yang gagal harus diproses ulang; tidak ada yang tersimpan setengah jalan.
 - **Tanda:** parsing (OCR) tetap berjalan normal beberapa menit, baru gagal di tahap ekstraksi.
 
 > Sejak 30 Sep 2026 yang tampil adalah pesan Indonesia. Pesan Inggris di atas masih bisa
@@ -49,7 +49,7 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 ### `Ollama tidak merespons dalam 600s (… token prompt).`
 
-- **Penyebab:** Ollama berjalan tetapi terlalu lambat — biasanya RAM penuh (lihat bagian 5).
+- **Penyebab:** Ollama berjalan tetapi terlalu lambat: biasanya RAM penuh (lihat bagian 5).
 - **Perbaikan:** tutup aplikasi berat (browser dengan banyak tab, Docker bila tidak dipakai),
   lalu proses ulang. Bila tetap terjadi, naikkan `OLLAMA_TIMEOUT` di `.env`.
 
@@ -77,7 +77,7 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 - **Penyebab:** `NOCODB_TABLE_IDS` di `.env` menunjuk ke tabel yang namanya tidak sama dengan
   tabel yang dikirim pipeline. Pernah terjadi September 2026: `.env` menunjuk ke 5 tabel ERD
-  lama, pipeline mengirim tabel `dol_schema` — nol baris masuk.
+  lama, pipeline mengirim tabel `dol_schema`, jadi nol baris masuk.
 - **Perbaikan:**
   ```bash
   set -a; . ./.env; set +a
@@ -93,7 +93,7 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 ### `push_to_nocodb diminta tapi NOCODB_PUSH_ENABLED=false.` (HTTP 409)
 
-- **Penyebab:** push dari API sengaja dimatikan secara default — pada arsitektur briefing,
+- **Penyebab:** push dari API sengaja dimatikan secara default; pada arsitektur briefing,
   n8n yang mengirim ke NocoDB.
 - **Perbaikan:** bila memang ingin FastAPI mengirim langsung, isi `NOCODB_PUSH_ENABLED=1`
   di `.env` lalu jalankan ulang server.
@@ -178,7 +178,7 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 ### Editor (VS Code / Antigravity) penuh garis merah `Cannot find module …`
 
 - **Penyebab:** editor memakai interpreter Python yang salah (3.14 sistem). Kodenya sendiri
-  tidak rusak — `make test` tetap lulus.
+  tidak rusak; `make test` tetap lulus.
 - **Perbaikan:** `Cmd+Shift+P` → *Python: Select Interpreter* → pilih
   `dol-parser/.venv311/bin/python`, lalu *Developer: Reload Window*.
 
@@ -194,7 +194,7 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 ### `Teks hasil parsing terlalu sedikit (… karakter untuk … halaman, …`
 
-- **Penyebab:** hasil OCR (hampir) kosong — biasanya berkas hasil foto buram atau halaman
+- **Penyebab:** hasil OCR (hampir) kosong: biasanya berkas hasil foto buram atau halaman
   terbalik. Sistem sengaja berhenti daripada mengirim teks kosong ke LLM (hasilnya pasti
   karangan).
 - **Perbaikan:** coba mesin OCR lain: `ocr=mac` (Apple Vision, macOS saja) atau
@@ -202,15 +202,15 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 ### Validasi `fail` padahal nilainya terlihat benar
 
-- Periksa dulu dokumen aslinya. Contoh nyata: SPH PT Vendor A menulis subtotal 604,8 jt,
-  PPN 61,25 jt, dan total 618,1 jt — **dokumen vendornya sendiri tidak konsisten**. Sistem
-  benar menandainya `CONFLICT`; keputusan ada di PM.
+- Periksa dulu dokumen aslinya. Contoh nyata (angka disamarkan): SPH PT Vendor A menulis
+  subtotal 519,6 jt, PPN 52,44 jt, dan total 533,2 jt: **dokumen vendornya sendiri tidak
+  konsisten**. Sistem benar menandainya `CONFLICT`; keputusan ada di PM.
 
 ### `Berkas berisi salinan ganda: halaman X-Y mengulang halaman sebelumnya dan tidak ikut diekstrak.`
 
 - **Artinya:** PDF berisi dua salinan dokumen yang sama (umum pada kontrak "half signed"
   yang dipindai untuk tiap pihak). Hanya salinan pertama yang dibaca AI; tanpa ini setiap
-  item terhitung dua kali. Contoh: `KONTRAK_HALF_SIGNED_ST_108.pdf`, 16 halaman = 8 × 2.
+  item terhitung dua kali. Contoh: sebuah kontrak 16 halaman = 8 × 2.
 - **Yang perlu dilakukan PM:** buka halaman yang disebut dan pastikan isinya memang sama.
   Bila salinan kedua ternyata **revisi** (harga atau tanggal berbeda), proses ulang dengan
   PDF yang hanya berisi versi terbaru.
@@ -218,7 +218,7 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 ### `Invalid JSON: EOF while parsing a string` / nilai berisi `0123456789012345…`
 
 - **Penyebab:** LLM terjebak mengulang deret angka di satu field sampai kuota token habis,
-  sehingga JSON terpotong. Contoh nyata: `KONTRAK_HALF_SIGNED_ST_108.pdf` — alamat Pihak
+  sehingga JSON terpotong. Contoh nyata: kontrak pindaian 16 halaman, alamat Pihak
   Pertama diikuti `0812345678901234567890…`; dokumen 16 halaman gagal total.
 - **Status:** diperbaiki 30 Sep 2026 dengan tiga lapis: setiap field teks diberi batas
   panjang di skema yang dikirim ke Ollama; deret angka ≥ 20 digit tanpa pemisah dibuang
@@ -228,15 +228,15 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 ### Angka uang raksasa atau digit yang tersambung
 
-- **Penyebab (sudah diperbaiki 29 Sep 2026):** OCR memecah angka seperti `61,253,708` menjadi
-  potongan `61,25` / `3` / `,708`, lalu LLM menyambungnya dengan angka lain.
-- Bila muncul lagi pada dokumen baru, laporkan dengan nama berkasnya — kemungkinan tata
+- **Penyebab (sudah diperbaiki 29 Sep 2026):** OCR memecah angka seperti `52,437,916` menjadi
+  potongan `52,43` / `7` / `,916`, lalu LLM menyambungnya dengan angka lain.
+- Bila muncul lagi pada dokumen baru, laporkan dengan nama berkasnya; kemungkinan tata
   letak yang belum dikenali `app/parsers/block_grouper.py`.
 
 ### `Sanity guard: PPN/Grand Total absurd … dikosongkan untuk ditinjau PM`
 
 - Disengaja. PPN lebih besar dari subtotal, atau total lebih dari 2× subtotal, pasti salah
-  baca. Sistem mengosongkannya — **tidak** menghitung ulang — supaya PM mengisinya dari dokumen.
+  baca. Sistem mengosongkannya (**tidak** menghitung ulang) supaya PM mengisinya dari dokumen.
 
 ---
 
@@ -252,7 +252,7 @@ Normal di MacBook Air M4 dengan RapidOCR: 1,5–6 menit per dokumen, sebagian be
 | RAM penuh (Ollama ±5,5 GB + Docker + browser) | tutup aplikasi lain; memori 16 GB cepat habis |
 | Ollama baru dinyalakan | panggilan pertama memuat model; dokumen kedua lebih cepat |
 
-Jangan aktifkan CoreML untuk RapidOCR — sudah diuji 5–8× **lebih lambat**.
+Jangan aktifkan CoreML untuk RapidOCR; sudah diuji 5–8× **lebih lambat**.
 
 ### n8n timeout saat memanggil `/api/v1/process-all`
 
@@ -266,7 +266,7 @@ Jangan aktifkan CoreML untuk RapidOCR — sudah diuji 5–8× **lebih lambat**.
 
 ### `Artefak tidak sesuai model: …` saat `python -m dol_schema --check`
 
-- **Penyebab:** `model.py` diubah tetapi `generated/` belum dibangkitkan ulang — atau
+- **Penyebab:** `model.py` diubah tetapi `generated/` belum dibangkitkan ulang, atau
   sebaliknya, berkas di `generated/` diedit tangan.
 - **Perbaikan:** `python -m dol_schema --emit`, lalu commit `model.py` dan `generated/`
   bersamaan. Jangan pernah mengedit `generated/` langsung.

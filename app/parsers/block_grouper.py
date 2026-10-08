@@ -48,17 +48,11 @@ BARE_FORM_LABELS: set[str] = {
     "dibuat di",
 }
 
-# Baris HANYA digabung dengan baris lain yang PERSIS setipe -- kecuali title+section_header
-# (judul dokumen dan nomornya sering jadi dua item Docling terpisah tapi satu unit visual).
-#
-# Sempat dicoba satu keluarga besar {paragraph, key_value, list_item} supaya lebih mirip
-# pengelompokan LandingAI, tapi ini menggabungkan paragraf narasi panjang ("Berdasarkan
-# hasil negosiasi...") dengan blok label form di baris berikutnya ("Nama"/"Jabatan") yang
-# kebetulan berjarak dekat -- hasilnya satu blok raksasa mencampur dua pihak berbeda dan
-# salah dikenali sebagai attestation. Same-type-only jauh lebih aman: tetap menggabungkan
-# baris alamat yang terbungkus 2 baris (sama-sama "paragraph") atau tumpukan Nama/Jabatan/
-# Alamat (sama-sama "key_value" berkat heuristik bare-label di docling_parser.py), tapi
-# tidak pernah menjembatani antara prosa dan label form.
+# Baris hanya digabung dengan baris yang PERSIS setipe (kecuali title+section_header).
+# Keluarga campuran {paragraph, key_value, list_item} sempat dicoba dan menggabungkan paragraf
+# narasi dengan label form di bawahnya: dua pihak tercampur dalam satu blok. Same-type-only
+# tetap menyatukan alamat dua baris dan tumpukan Nama/Jabatan/Alamat, tanpa menjembatani
+# prosa dan label form.
 MERGE_FAMILIES: list[set] = [
     {"title", "section_header"},
     {"paragraph"},
@@ -116,7 +110,7 @@ def _union_bbox(boxes: list[BBox]) -> BBox | None:
 # prosa. Prosa dua kolom yang sejajar tidak boleh diselang-seling baris per baris.
 ROW_FRAGMENT_MAX_CHARS = 40
 # Dua potongan dianggap satu angka yang terpotong OCR bila celah horizontalnya lebih
-# kecil dari ini (fraksi lebar halaman) -- "61,25" + "3" + ",708" hampir bersentuhan.
+# kecil dari ini (fraksi lebar halaman) -- "52,43" + "7" + ",916" hampir bersentuhan.
 NUMBER_JOIN_MAX_GAP = 0.004
 _NUMERIC_FRAGMENT = re.compile(r"^[\d.,]+$")
 
@@ -130,7 +124,7 @@ def _same_row(a: DraftBlock, b: DraftBlock) -> bool:
 
 def _join_row(row: list[DraftBlock]) -> str:
     """Satu baris visual kiri->kanan. Potongan angka yang bersentuhan disambung tanpa
-    spasi ("61,25"+"3"+",708" -> "61,253,708"); potongan lain dipisah satu spasi."""
+    spasi ("52,43"+"7"+",916" -> "52,437,916"); potongan lain dipisah satu spasi."""
     text = row[0].text.strip()
     for prev, cur in zip(row, row[1:]):
         piece = cur.text.strip()
@@ -146,8 +140,8 @@ def _group_text(members: list[DraftBlock]) -> str:
 
     Pengecualian: blok ringkasan harga dua kolom (label kiri, nilai kanan) yang OCR-nya
     terpecah. Docling bisa mengeluarkan potongannya melompat-lompat -- SPH PT Vendor A
-    menghasilkan "PPN 11%\\n61,25\\nTotal Beban Pekerjaan\\n3\\n,708\\n618,105,600", lalu LLM
-    menyambung digitnya jadi PPN 6.125.708.618. Kalau urutan mentahnya MUNDUR secara
+    menghasilkan "PPN 11%\\n52,43\\nTotal Beban Pekerjaan\\n7\\n,916\\n533,218,400", lalu LLM
+    menyambung digitnya jadi PPN 5.243.916.533. Kalau urutan mentahnya MUNDUR secara
     vertikal dan semua potongannya pendek, potongan disusun ulang per baris visual.
     """
     texts = [m for m in members if m.text]
@@ -212,12 +206,9 @@ def _x_left(block: DraftBlock) -> float:
     return block.bbox[0] if block.bbox else 0.0
 
 
-# Label kolom kiri di layout dua-kolom ("Nama", "Jabatan", ..., tapi juga "Lampiran",
-# "SPK", "Perihal", dst.) dikenali secara STRUKTURAL -- bentuk & posisinya, bukan daftar
-# kata tetap -- supaya berlaku untuk dokumen apa pun, termasuk kata yang belum pernah
-# kita lihat sebelumnya. BARE_FORM_LABELS masih dipakai docling_parser.py sebagai
-# penjagaan tambahan (memaksa kata yang SUDAH dikenal jadi tipe "key_value" walau
-# tanpa pasangan nilai), tapi pemasangan di bawah ini tidak lagi bergantung padanya.
+# Label kolom kiri di layout dua kolom dikenali dari bentuk & posisinya, bukan daftar kata
+# tetap, supaya berlaku juga untuk label yang belum pernah terlihat. BARE_FORM_LABELS di
+# docling_parser.py hanya penjagaan tambahan.
 LABEL_MAX_WORDS = 4
 LABEL_MAX_CHARS = 40
 # Label & nilainya di layout ini SEBARIS (sisi-kiri vs sisi-kanan) -- toleransi jarak-Y
@@ -257,12 +248,8 @@ def _is_value_line(block: DraftBlock) -> bool:
 # yang sudah cocok. Sedikit lebih lega dari MAX_VERTICAL_GAP karena baris sambungan
 # kadang berjarak agak lebih jauh dari nilainya sendiri.
 CONTINUATION_MAX_GAP = 0.03
-# Toleransi jarak TEPI KIRI supaya baris sambungan dianggap "sekolom" dengan nilainya,
-# bukan baris lain yang kebetulan dekat secara vertikal tapi di kolom berbeda. Dibanding
-# titik-tengah, tepi kiri jauh lebih stabil di sini -- nilai baris pertama & sambungannya
-# rata kiri ke kolom yang sama walau panjang teksnya jauh berbeda (mis. nilai "Lampiran"
-# yang panjang vs sambungannya yang cuma beberapa kata -- titik-tengah keduanya bisa
-# melenceng >0.15 walau tepi kirinya cuma beda ~0.01).
+# Baris sambungan dicocokkan lewat tepi kiri, bukan titik tengah: tepi kiri nilai dan
+# sambungannya rata ke kolom yang sama walau panjang teksnya jauh berbeda.
 CONTINUATION_MAX_X_DRIFT = 0.05
 
 
@@ -306,11 +293,8 @@ def pair_labels_with_values(blocks: list[DraftBlock]) -> list[DraftBlock]:
     if not labels:
         return blocks
 
-    # Sama seperti pencocokan baris sambungan di bawah: kumpulkan SEMUA kombinasi
-    # (label, nilai) yang valid -- sebaris (jarak-Y ketat) dan label di SEBELAH KIRI
-    # nilainya (ciri layout dua-kolom "Label   : Nilai") -- lalu urutkan dari yang
-    # tersekat, supaya label yang diproses lebih dulu tidak serakah merebut nilai
-    # yang sebenarnya lebih cocok untuk label lain di baris tetangga.
+    # Kumpulkan semua pasangan (label, nilai) yang sebaris dengan label di kiri nilainya, lalu
+    # urutkan dari yang terdekat, supaya label pertama tidak serakah merebut nilai label tetangga.
     triples: list[tuple[float, DraftBlock, DraftBlock]] = []
     for label in labels:
         for value in values:
@@ -340,13 +324,9 @@ def pair_labels_with_values(blocks: list[DraftBlock]) -> list[DraftBlock]:
 
     consumed_ids = {id(b) for pair in pairs for b in pair}
 
-    # Baris sambungan (mis. alamat baris ke-2) TIDAK boleh diperiksa satu pasangan
-    # per satu pasangan sesuai urutan pembentukannya -- dua pasangan yang berdekatan
-    # (mis. Jabatan lalu Alamat) bisa sama-sama memenuhi ambang jarak, dan yang
-    # diproses lebih dulu akan merebutnya secara serakah walau bukan yang tersekat.
-    # Sebagai gantinya kumpulkan SEMUA kombinasi (kandidat, pasangan) yang valid lalu
-    # urutkan berdasar jarak-Y terkecil supaya kecocokan yang benar-benar tersekat
-    # selalu menang, siapa pun yang diproses lebih dulu.
+    # Sama seperti pasangan label-nilai di atas: kumpulkan semua kombinasi (kandidat, pasangan)
+    # lalu urutkan berdasar jarak-Y, supaya pasangan yang diproses lebih dulu tidak merebut
+    # baris sambungan milik pasangan tetangga.
     candidates = [
         cand
         for cand in blocks

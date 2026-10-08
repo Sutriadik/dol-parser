@@ -43,7 +43,7 @@ def _wait(predicate, timeout: float = 5.0) -> bool:
     return False
 
 
-# --------------------------------------------------------------------- document_id
+# document_id
 def test_content_hash_sama_untuk_isi_sama_nama_berbeda(tmp_path):
     """n8n sering menyimpan unggahan dengan nama temporer; id tidak boleh ikut berubah."""
     a, b = tmp_path / "SPK.pdf", tmp_path / "tmp-9f2a.pdf"
@@ -77,7 +77,7 @@ def test_content_hash_membaca_berkas_besar_bertahap(tmp_path):
     assert content_hash(besar).startswith("doc-")
 
 
-# --------------------------------------------------------------------- antrian
+# antrian
 def test_job_sukses_menyimpan_hasil(tmp_path):
     q = JobQueue(runner=lambda job: {"status": "success", "companion_payload": {"document": [{}]}})
     q.start()

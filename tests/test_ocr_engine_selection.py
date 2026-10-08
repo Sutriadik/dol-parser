@@ -117,20 +117,20 @@ def test_rapidocr_tanpa_pengklasifikasi_arah_baris():
 def test_tabel_panjang_tidak_dipotong():
     """
     Regresi ke bug nyata: blok tabel dipotong `[:3000]`, sehingga Lampiran I sebuah
-    kontrak berhenti di sel "5.7" -- baris 4-5, subtotal, total, dan termin hilang.
+    kontrak berhenti di sel "6.2" -- baris 4-5, subtotal, total, dan termin hilang.
     """
     rows = [["No", "Uraian", "Harga Total"]]
-    rows += [[str(i), f"Pekerjaan nomor {i} uraian panjang", "4.980.000,00"] for i in range(80)]
-    rows.append(["", "Total Keseluruhan (Sebelum PPN)", "425.280.000,00"])
+    rows += [[str(i), f"Pekerjaan nomor {i} uraian panjang", "4.735.000,00"] for i in range(80)]
+    rows.append(["", "Total Keseluruhan (Sebelum PPN)", "401.360.000,00"])
     block = dp._blok_tabel(rows, None, 0.9)
     assert len(block.text) > 3000
-    assert block.text.rstrip().endswith("425.280.000,00 |")
+    assert block.text.rstrip().endswith("401.360.000,00 |")
 
 
 def test_cek_cakupan_menandai_halaman_yang_teksnya_terpotong():
-    # Persis kasus Lampiran I: Docling membaca seluruh tabel, markdown berhenti di "5.7".
-    sumber = {13: "Tools Pendampingan Online 5.760.000 Akomodasi Konsumsi Laporan Termin"}
-    hasil = {13: "| Tools Pendampingan Online | 5.7"}
+    # Persis kasus Lampiran I: Docling membaca seluruh tabel, markdown berhenti di "6.2".
+    sumber = {13: "Tools Pendampingan Online 6.240.000 Akomodasi Konsumsi Laporan Termin"}
+    hasil = {13: "| Tools Pendampingan Online | 6.2"}
     temuan = dp.cek_cakupan(sumber, hasil)
     assert [t["halaman"] for t in temuan] == [13]
     assert temuan[0]["cakupan"] < 0.5

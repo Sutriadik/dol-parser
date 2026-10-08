@@ -30,7 +30,7 @@ Benchmark nyata di `storage/outputs/bench/_hasil/_ringkasan.json`:
 
 Node **HTTP Request** n8n default timeout 300 detik, dan proxy di depannya (nginx 60s,
 Cloudflare 100s) memutus jauh lebih awal. Endpoint sinkron `/api/v1/process-all` karena itu
-**timeout pada dokumen normal, bukan kasus ekstrem** — dan n8n akan mengirim ulang,
+**timeout pada dokumen normal, bukan kasus ekstrem**, dan n8n akan mengirim ulang,
 menumpuk antrian di mesin yang sama sampai makin lambat.
 
 `/api/v1/process-all` tetap ada untuk uji manual dan `curl`. **Jangan dipakai dari n8n.**
@@ -46,7 +46,7 @@ Bila `CALLBACK_SECRET` diisi, setiap callback membawa header
 `X-OpenADE-Signature: sha256=<hex>` = HMAC-SHA256 body mentah dengan kunci itu. Di n8n,
 hitung ulang di node Code atas body mentah dan tolak bila berbeda.
 
-### `POST /api/v1/jobs` — kirim dokumen
+### `POST /api/v1/jobs`: kirim dokumen
 
 `multipart/form-data`:
 
@@ -72,20 +72,20 @@ Balasan **202, seketika**:
 ```
 
 > **`document_id` adalah kunci idempotensi Anda.** Ia adalah sha256 isi berkas, dihitung
-> sebelum dokumen diproses. PDF yang sama menghasilkan `document_id` yang sama — nama
+> sebelum dokumen diproses. PDF yang sama menghasilkan `document_id` yang sama; nama
 > berkasnya boleh berbeda, mesin OCR-nya boleh berbeda. Itulah yang membuat push berulang
 > ke NocoDB menjadi **UPDATE**, bukan baris kembar.
 
-### `GET /api/v1/jobs/{job_id}` — polling
+### `GET /api/v1/jobs/{job_id}`: polling
 
 Selalu **200**, status ada di body (`queued` / `running` / `done` / `failed`). Kode HTTP
 sengaja tidak dipakai untuk membedakan "belum selesai": node n8n menganggap kode non-2xx
 sebagai error dan menghentikan alur.
 
 Tambahkan `?include_result=true` untuk ikut menarik hasilnya. **Jangan pakai pada tiap
-polling** — hasil memuat markdown penuh dan seluruh evidence, bisa puluhan MB.
+polling**: hasil memuat markdown penuh dan seluruh evidence, bisa puluhan MB.
 
-### `GET /api/v1/jobs?document_id=doc-xxx` — cek pemrosesan ulang
+### `GET /api/v1/jobs?document_id=doc-xxx`: cek pemrosesan ulang
 
 Untuk tahu berkas ini sudah pernah atau sedang diproses, sebelum mengirim ulang.
 
@@ -93,9 +93,9 @@ Untuk tahu berkas ini sudah pernah atau sedang diproses, sebelum mengirim ulang.
 
 ## Rangkaian node di n8n
 
-### Pilihan A — callback (disarankan)
+### Pilihan A: callback (disarankan)
 
-1. **Webhook / Google Drive Trigger / IMAP** — sumber PDF.
+1. **Webhook / Google Drive Trigger / IMAP**: sumber PDF.
 2. **HTTP Request**
    - Method `POST`, URL `{{$env.OPENADE_URL}}/api/v1/jobs`
    - Header `X-API-Key: {{$env.OPENADE_API_KEY}}`
@@ -105,7 +105,7 @@ Untuk tahu berkas ini sudah pernah atau sedang diproses, sebelum mengirim ulang.
 3. **Wait**, Resume: **On Webhook Call**. FastAPI mem-POST hasil ke sini.
 4. **HTTP Request** ke NocoDB, satu node per tabel (lihat bagian berikutnya).
 
-### Pilihan B — polling (bila n8n di belakang NAT dan tidak bisa menerima callback)
+### Pilihan B: polling (bila n8n di belakang NAT dan tidak bisa menerima callback)
 
 Ganti langkah 3 dengan: **Wait 60 detik** → **HTTP Request** `GET /api/v1/jobs/{{job_id}}`
 → **IF** `status == "done"` → kalau belum, kembali ke Wait. Ambil `?include_result=true`
@@ -127,7 +127,7 @@ BAST masih usulan).
   "extraction_run":       [ ... ] }          <- jangan dikirim ke NocoDB
 ```
 
-### Pilihan 1 — biarkan parser yang menulis (paling sederhana)
+### Pilihan 1: biarkan parser yang menulis (paling sederhana)
 
 Set `NOCODB_PUSH_ENABLED=1` di `.env` service ini, lalu kirim `push_to_nocodb=true`
 bersama berkasnya di `POST /api/v1/jobs`. Langkah 4 di Pilihan A tidak diperlukan lagi.
@@ -146,14 +146,14 @@ periksa `nocodb_push`, bukan hanya `status`.
 `push_to_nocodb=true` juga ada di `/api/v1/process-all` (sinkron, untuk uji manual), dan
 `scripts/companion.py --push` untuk berkas `.companion.json` yang sudah ada.
 
-### Pilihan 2 — n8n menulis sendiri
+### Pilihan 2: n8n menulis sendiri
 
 Ikuti `../dol-schema/generated/schema.json`. Aturan yang wajib:
 
 1. **Urutan:** `insert_order` (induk dulu). Tabel di luar daftar itu (usulan, audit)
    tidak dikirim.
 2. **Judul, bukan nama teknis.** API rekaman NocoDB memakai **judul kolom** sebagai kunci
-   JSON dan di `where`. Terjemahkan setiap kunci lewat `columns[].label` — mis.
+   JSON dan di `where`. Terjemahkan setiap kunci lewat `columns[].label`, mis.
    `contract_number` → `Nomor Kontrak`. Kolom `Id` tetap `Id`.
 3. **Tukar placeholder induk.** `_contract_ref` berisi kunci dokumen induk; ganti dengan
    `contract_id` = Id baris Kontrak yang baru dibuat (judulnya `ID Kontrak`).
@@ -209,7 +209,7 @@ Docker/uptime monitor):
 curl -s localhost:8000/health | python -m json.tool
 ```
 
-`status: "degraded"` berarti storage siap tapi Ollama mati — job akan masuk antrian lalu
+`status: "degraded"` berarti storage siap tapi Ollama mati; job akan masuk antrian lalu
 gagal di tahap ekstraksi. Nyalakan `ollama serve` lebih dulu.
 
 Uji satu dokumen tanpa n8n dan tanpa push (`make uji-jobs` di atas sudah melakukan ini
@@ -235,6 +235,6 @@ curl "localhost:8000/api/v1/jobs/<job_id>?include_result=true" -H "X-API-Key: $O
   berjalan. Untuk satu instance ini memadai; penggantinya nanti Redis + RQ/Celery, bukan
   menambal `JobQueue`.
 - **Callback dikirim sekali, tanpa retry.** Kalau n8n sedang restart, callback gagal tetapi
-  job tetap `done` dan hasilnya masih bisa diambil lewat `GET /api/v1/jobs/{id}` —
+  job tetap `done` dan hasilnya masih bisa diambil lewat `GET /api/v1/jobs/{id}`, jadi
   kerja 3-5 menit tidak terbuang. Alur n8n sebaiknya punya jadwal yang memeriksa
   `GET /api/v1/jobs` untuk job `done` yang `callback_status`-nya bukan `200`.

@@ -125,10 +125,10 @@ def test_kolom_milik_n8n_tidak_dikirim():
 
 
 def test_harga_format_inggris_dari_vendor_terbaca():
-    """SPH vendor sering memakai koma ribuan ("604,800,000"); pemeta lama membacanya None."""
+    """SPH vendor sering memakai koma ribuan ("519,600,000"); pemeta lama membacanya None."""
     e = _extract_sph()
-    e["data"]["Grand Total"] = "604,800,000"
-    assert map_sph(e)["sph"][0]["total_price"] == 604800000.0
+    e["data"]["Grand Total"] = "519,600,000"
+    assert map_sph(e)["sph"][0]["total_price"] == 519600000.0
 
 
 # Lihat penjelasan NASIB_KONTRAK di test_companion_contract.py.

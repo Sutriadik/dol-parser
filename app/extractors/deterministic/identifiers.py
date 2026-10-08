@@ -68,7 +68,7 @@ def normalize_document_number(value: str | None) -> str | None:
     return re.sub(r"\s{2,}", " ", dirapikan).strip()
 
 
-# --------------------------------------------------------------------------- dua nomor kontrak
+# dua nomor kontrak
 # Kata yang tidak membedakan satu perusahaan dari perusahaan lain.
 _KATA_UMUM = {
     "pt",

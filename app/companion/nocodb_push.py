@@ -72,7 +72,7 @@ class CompanionPusher:
         self._ids: dict[tuple[str, str], int] = {}  # (tabel, ref) -> Id NocoDB
         self._pushed: dict[str, list[int]] = defaultdict(list)  # tabel -> Id yang dikirim
 
-    # ------------------------------------------------------------------ HTTP
+    # HTTP
     def _headers(self) -> dict[str, str]:
         return {"xc-token": self.api_token, "Content-Type": "application/json"}
 
@@ -129,7 +129,7 @@ class CompanionPusher:
         rows = body if isinstance(body, list) else [body]
         return [int(r["Id"]) for r in rows if isinstance(r, dict) and r.get("Id") is not None]
 
-    # ------------------------------------------------------------------ ref FK
+    # ref FK
     def _resolve_refs(self, table_name: str, row: dict[str, Any]) -> dict[str, Any]:
         """`_contract_ref: "doc-..."` -> `contract_id: 41`. Baris yatim dihentikan, bukan
         dikirim dengan FK kosong -- baris tanpa induk tidak bisa ditemukan lagi oleh PM."""
@@ -148,7 +148,7 @@ class CompanionPusher:
             out[f"{parent}_id"] = real
         return out
 
-    # ------------------------------------------------------------------ penjaga
+    # penjaga
     def _guard_reviewed(
         self, client: httpx.Client, payload: dict[str, list[dict[str, Any]]]
     ) -> None:
@@ -188,7 +188,7 @@ class CompanionPusher:
                             f"dokumennya bersama PM."
                         )
 
-    # ------------------------------------------------------------------ tulis
+    # tulis
     def _upsert(
         self,
         client: httpx.Client,
@@ -256,7 +256,7 @@ class CompanionPusher:
         r.raise_for_status()
         return len(stale)
 
-    # ------------------------------------------------------------------ entri
+    # entri
     def plan(self, payload: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
         masalah = validate_payload(payload)
         if masalah:

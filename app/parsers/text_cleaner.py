@@ -23,9 +23,7 @@ import re
 
 from app.parsers.table_converter import reformat_markdown_tables_in_text
 
-# ============================================================================
 # 1. Common OCR Typo Dictionary
-# ============================================================================
 
 OCR_TYPO_MAP: dict[str, str] = {
     # Angka ↔ Huruf confusion
@@ -49,12 +47,10 @@ OCR_TYPO_MAP: dict[str, str] = {
     "TELkOM": "TELKOM",
     "BHAKTi": "BHAKTI",
     "TEKNOvASI": "TEKNOVASI",
-    "KKSTT": "KK STT",
     "Isiam": "Islam",
     "isiam": "islam",
     "BuT": "BUT",
     "ATs": "ATS",
-    "PURNOMOwATI": "PURNOMOWATI",
     "&OPERATION": "& OPERATION",
     "&operation": "& operation",
     "Acess Point": "Access Point",
@@ -74,22 +70,25 @@ OCR_TYPO_MAP: dict[str, str] = {
     "yangberwenang": "yang berwenang",
     # Unit dan singkatan
     "pkt": "pkt",
-    "MDjamil": "M Djamil",
     "LampiranII": "Lampiran II",
     "LampiranI": "Lampiran I",
 }
+
+
+# Huruf kecil yang bentuknya sama dengan kapitalnya (c k o s v w x z) dan terselip di tengah
+# kata kapital hampir pasti salah baca OCR ("KERJAsAMA"). Aturan ini menggantikan entri kamus
+# per kata -- kamus lama sempat memuat nama penandatangan asli hanya untuk satu huruf "w".
+_KAPITAL_SALAH_BACA = re.compile(r"\b([A-Z]{2,})([cksovwxz])(?=[A-Z]{2,}\b)")
 
 
 def fix_common_ocr_typos(text: str) -> str:
     """Mengganti typo OCR umum berdasarkan dictionary lookup."""
     for typo, correct in OCR_TYPO_MAP.items():
         text = text.replace(typo, correct)
-    return text
+    return _KAPITAL_SALAH_BACA.sub(lambda m: m.group(1) + m.group(2).upper(), text)
 
 
-# ============================================================================
 # 2. Fix Missing Spaces & Concatenations
-# ============================================================================
 
 
 def fix_missing_spaces(text: str) -> str:
@@ -114,7 +113,7 @@ def fix_missing_spaces(text: str) -> str:
     # 4. Spasi setelah No. <angka>: "No.1" → "No. 1", "No.12" → "No. 12"
     text = re.sub(r"\bNo\.(\d+)", r"No. \1", text)
 
-    # 5. Spasi antara angka desimal/kolektif dan kata: "093.000sebuah" → "093.000 sebuah"
+    # 5. Spasi antara angka desimal/kolektif dan kata: "456.000sebuah" → "456.000 sebuah"
     text = re.sub(r"(\d{3}\.\d{3})([a-zA-Z])", r"\1 \2", text)
 
     # 6. Kata menempel kata (CamelCase): "InformasiUniversitas" → "Informasi Universitas".
@@ -144,7 +143,7 @@ def fix_missing_spaces(text: str) -> str:
     text = re.sub(r":([A-Za-z])", r": \1", text)
     text = re.sub(r":(\d)", r": \1", text)
 
-    # 12. Kurung tutup menempel huruf: ")PIHAK" → ") PIHAK", "UIN)Sjech" → "UIN) Sjech"
+    # 12. Kurung tutup menempel huruf: ")PIHAK" → ") PIHAK", "(UIN)Kota" → "(UIN) Kota"
     text = re.sub(r"\)([A-Za-z])", r") \1", text)
 
     # 13. Huruf menempel kurung buka: "sah(" → "sah (", "Negeri(UIN)" → "Negeri (UIN)"
@@ -157,9 +156,7 @@ def fix_missing_spaces(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 3. Fix Entity & Legal Spacing (Uppercase Compounds)
-# ============================================================================
 
 UPPERCASE_GLUED_PAIRS = [
     (r"\bTELEKOMUNIKASIINDONESIA\b", "TELEKOMUNIKASI INDONESIA"),
@@ -192,9 +189,7 @@ def fix_entity_and_legal_spacing(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 4. Normalize Entity Casing
-# ============================================================================
 
 UPPERCASE_ENTITIES = [
     r"universitas\s+telkom",
@@ -214,9 +209,7 @@ def normalize_entity_casing(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 5. Clean Signature Noise & Artifacts
-# ============================================================================
 
 
 def clean_signature_noise(text: str) -> str:
@@ -269,9 +262,7 @@ def clean_signature_noise(text: str) -> str:
     return "\n".join(cleaned_lines)
 
 
-# ============================================================================
 # 6. Clean Footer Noise
-# ============================================================================
 
 FOOTER_NOISE_PATTERNS = [
     # Alamat kampus panjang yang bukan konten utama
@@ -290,9 +281,7 @@ def clean_footer_noise(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 7. Fix Number Formatting
-# ============================================================================
 
 
 def fix_number_formatting(text: str) -> str:
@@ -304,9 +293,7 @@ def fix_number_formatting(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 8. Normalize Whitespace
-# ============================================================================
 
 
 _INDENT_LIST = re.compile(r"^( +)(?:[-*] |\d{1,3}[.)] )")
@@ -344,9 +331,7 @@ def strip_invisible_and_control_chars(text: str) -> str:
     return text
 
 
-# ============================================================================
 # Master Cleaning Function
-# ============================================================================
 
 
 def clean_ocr_text(text: str) -> str:

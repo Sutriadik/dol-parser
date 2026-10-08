@@ -128,7 +128,7 @@ def test_attestation_detection_skips_signature_image_in_between():
     blocks = [
         _block("section_header", "PIHAK KEDUA", 0.75, 0.765),
         _block("image", "", 0.77, 0.80),
-        _block("paragraph", "Indah Purnomowati\nDirektur", 0.82, 0.85),
+        _block("paragraph", "Sari Wulandari\nDirektur", 0.82, 0.85),
     ]
     annotated = annotate_attestation(blocks)
     assert annotated[2].type == "attestation"
@@ -143,7 +143,7 @@ def test_labeled_preamble_block_is_not_misidentified_as_attestation():
     blocks = [
         _block(
             "key_value",
-            "Nama\nJabatan\n: Budi Santoso Wijaya\n: Direktur Aset dan Sustainability",
+            "Nama\nJabatan\n: Budi Santoso Wijaya\n: Direktur Operasional",
             0.30,
             0.34,
         )
@@ -178,7 +178,7 @@ def test_narrative_paragraph_does_not_merge_with_bare_form_label():
         _block("key_value", "Nama", 0.117, 0.13),
         _block("key_value", "Jabatan", 0.132, 0.145),
         _block("key_value", ": Budi Santoso Wijaya", 0.117, 0.13, x0=0.5),
-        _block("key_value", ": Direktur Aset dan Sustainability", 0.132, 0.145, x0=0.5),
+        _block("key_value", ": Direktur Operasional", 0.132, 0.145, x0=0.5),
     ]
     merged = merge_adjacent_blocks(blocks)
     assert len(merged) == 2  # paragraf tetap sendiri; 4 baris label/nilai tergabung terpisah
@@ -201,7 +201,7 @@ def test_full_pipeline_on_realistic_page_fragment():
     assert types == ["title", "paragraph", "section_header", "attestation", "table"]
 
 
-# ---------------------------------------------------------------- reading_order_sort
+# reading_order_sort
 def test_two_column_signature_blocks_reordered_column_major():
     """
     Regresi urutan tampil: blok kanan (PIHAK KEDUA) yang union-bbox-nya memanjang ke
@@ -216,7 +216,7 @@ def test_two_column_signature_blocks_reordered_column_major():
         "attestation", "Budi Santoso Wijaya\nDirektur", 0.764, 0.833, x0=0.111, x1=0.365
     )
     right_attestation = _block(
-        "attestation", "Indah Purnomowati\nDirektur", 0.803, 0.834, x0=0.649, x1=0.814
+        "attestation", "Sari Wulandari\nDirektur", 0.803, 0.834, x0=0.649, x1=0.814
     )
 
     # Urutan input sengaja diacak (mensimulasikan ymin murni yang menyelip-nyelipkan kolom)
@@ -259,7 +259,7 @@ def test_two_column_reorder_ignores_unrelated_content_right_before_it():
         "attestation", "Budi Santoso Wijaya\nDirektur", 0.764, 0.833, x0=0.111, x1=0.365
     )
     right_attestation = _block(
-        "attestation", "Indah Purnomowati\nDirektur", 0.803, 0.834, x0=0.649, x1=0.814
+        "attestation", "Sari Wulandari\nDirektur", 0.803, 0.834, x0=0.649, x1=0.814
     )
 
     preamble = [closing, lokasi, tanggal_val, tanggal_label]
@@ -303,8 +303,8 @@ def test_single_column_flow_order_is_preserved():
 
 def test_continuation_line_attaches_to_nearest_pair_not_first_processed():
     """
-    Regresi bug nyata (SPK_ATS_ORACLE_FULL_SIGNED.pdf, halaman 1): baris sambungan alamat
-    "JI. Telekomunikasi No. 1..." berjarak-Y 0.030 dari nilai "Jabatan" dan 0.016 dari nilai
+    Regresi bug nyata (SPK lisensi perangkat lunak, halaman 1): baris sambungan alamat
+    "JI. Merpati Raya No. 18..." berjarak-Y 0.030 dari nilai "Jabatan" dan 0.016 dari nilai
     "Alamat" -- keduanya di bawah ambang CONTINUATION_MAX_GAP (0.03), tapi Alamat jelas
     lebih dekat. Versi lama mencocokkan berurutan sesuai urutan pasangan terbentuk (Nama,
     Jabatan, Alamat) dan Jabatan diproses lebih dulu, sehingga merebutnya secara serakah --
@@ -315,16 +315,14 @@ def test_continuation_line_attaches_to_nearest_pair_not_first_processed():
     nama_label = _block("key_value", "Nama", 0.180, 0.190, x0=0.5, x1=0.6)
     nama_value = _block("key_value", ": Budi Santoso Wijaya", 0.185, 0.195, x0=0.6, x1=0.9)
     jabatan_label = _block("key_value", "Jabatan", 0.2007, 0.2107, x0=0.5, x1=0.6)
-    jabatan_value = _block(
-        "key_value", ": Direktur Aset dan Sustainability", 0.2057, 0.2157, x0=0.6, x1=0.9
-    )
+    jabatan_value = _block("key_value", ": Direktur Operasional", 0.2057, 0.2157, x0=0.6, x1=0.9)
     alamat_label = _block("key_value", "Alamat", 0.2147, 0.2247, x0=0.5, x1=0.6)
     alamat_value = _block(
-        "key_value", ": Kampus Universitas Telkom", 0.2197, 0.2297, x0=0.6, x1=0.9
+        "key_value", ": Kampus Universitas Contoh", 0.2197, 0.2297, x0=0.6, x1=0.9
     )
     continuation = _block(
         "paragraph",
-        "JI. Telekomunikasi No. 1 Terusan Buah Batu, Bandung",
+        "JI. Merpati Raya No. 18 Banyumanik, Semarang",
         0.2357,
         0.2457,
         x0=0.6,
@@ -344,8 +342,8 @@ def test_continuation_line_attaches_to_nearest_pair_not_first_processed():
 
     assert [b.text for b in result] == [
         "Nama : Budi Santoso Wijaya",
-        "Jabatan : Direktur Aset dan Sustainability",
-        "Alamat : Kampus Universitas Telkom JI. Telekomunikasi No. 1 Terusan Buah Batu, Bandung",
+        "Jabatan : Direktur Operasional",
+        "Alamat : Kampus Universitas Contoh JI. Merpati Raya No. 18 Banyumanik, Semarang",
     ], (
         "urutan & isi harus sesuai barisan dokumen asli: Nama, Jabatan, lalu Alamat (dengan "
         "sambungannya)"
@@ -354,7 +352,7 @@ def test_continuation_line_attaches_to_nearest_pair_not_first_processed():
 
 def test_continuation_matching_ignores_section_headers():
     """
-    Regresi bug nyata (SPK_ATS_ORACLE_FULL_SIGNED.pdf, halaman 2): judul berdiri sendiri
+    Regresi bug nyata (SPK lisensi perangkat lunak, halaman 2): judul berdiri sendiri
     "PIHAK PERTAMA" (section_header, bukan baris sambungan) berjarak-Y dekat di bawah
     "Tanggal : 2 Juni 2026" -- filter tipe kandidat versi lama (`not in {"key_value"}`)
     keliru meloloskannya sebagai "sambungan" nilai Tanggal. Hanya baris berjenis
@@ -376,20 +374,20 @@ def test_continuation_matching_ignores_section_headers():
 
 def test_label_pairing_generalizes_to_words_outside_the_known_vocabulary():
     """
-    Regresi bug nyata (SPK_ATS_ORACLE_FULL_SIGNED.pdf, halaman 3): "Lampiran" dan "SPK"
+    Regresi bug nyata (SPK lisensi perangkat lunak, halaman 3): "Lampiran" dan "SPK"
     bukan kata yang ada di BARE_FORM_LABELS, jadi versi lama (berbasis daftar kata) tidak
     pernah mengenalinya sebagai label -- keduanya tetap bertipe "paragraph" polos dan
     malah tergabung lewat merge_adjacent_blocks dengan baris sambungan TETANGGA yang
-    sebenarnya bukan miliknya ("SPK" + "Teknologi Informasi Universitas Telkom").
+    sebenarnya bukan miliknya ("SPK" + "Teknologi Informasi Universitas Contoh").
     Pemasangan sekarang berbasis bentuk & posisi (label pendek tanpa titik dua, sebaris,
     di kiri nilainya), bukan daftar kata, supaya berlaku untuk label apa pun.
     """
     # Koordinat asli dari dokumen (bukan dibuat-buat) -- diambil langsung dari output
-    # Docling untuk halaman 3 SPK_ATS_ORACLE_FULL_SIGNED.pdf sebelum pengelompokan.
+    # Docling untuk halaman 3 SPK itu sebelum pengelompokan. Teksnya diganti rekaan.
     lampiran_label = _block("paragraph", "Lampiran", 0.05654, 0.07197, x0=0.13019, x1=0.20595)
     lampiran_value = _block(
         "key_value",
-        ": Pengadaan Perpanjangan Lisensi ATS Oracie Tahun 2026 Kebutuhan Direktorat Pusat",
+        ": Pengadaan Perpanjangan Lisensi Basis Data Tahun 2026 Kebutuhan Direktorat Pusat",
         0.05615,
         0.07038,
         x0=0.21886,
@@ -397,7 +395,7 @@ def test_label_pairing_generalizes_to_words_outside_the_known_vocabulary():
     )
     lampiran_continuation = _block(
         "paragraph",
-        "Teknologi Informasi Universitas Telkom",
+        "Teknologi Informasi Universitas Contoh",
         0.07236,
         0.08541,
         x0=0.22054,
@@ -417,8 +415,8 @@ def test_label_pairing_generalizes_to_words_outside_the_known_vocabulary():
     result = pair_labels_with_values(blocks)
 
     assert [b.text for b in result] == [
-        "Lampiran : Pengadaan Perpanjangan Lisensi ATS Oracie Tahun 2026 Kebutuhan Direktorat "
-        "Pusat Teknologi Informasi Universitas Telkom",
+        "Lampiran : Pengadaan Perpanjangan Lisensi Basis Data Tahun 2026 Kebutuhan Direktorat "
+        "Pusat Teknologi Informasi Universitas Contoh",
         "SPK : 123/ABC11/ABC-SET/2026, tanggal 2 Juni 2026",
     ], (
         "'Lampiran' dan 'SPK' harus terpasang dengan nilainya masing-masing (termasuk baris "

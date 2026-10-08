@@ -468,31 +468,8 @@ def process_full_endpoint(
         _cleanup(temp_path)
 
 
-# =============================================================================================
-#  Integrasi n8n — jalur asinkron
-# =============================================================================================
-#
-# Alur yang disarankan di n8n (3 node):
-#
-#   1. HTTP Request  POST {API}/api/v1/jobs
-#        Body: multipart/form-data  file=<PDF>, doc_type=auto, callback_url=<URL webhook n8n>
-#        Header: X-API-Key
-#        -> balas SEKETIKA: {job_id, document_id, status:"queued", queue_position}
-#
-#   2. Wait for Webhook  (node "Wait", mode "On Webhook Call")
-#        FastAPI mem-POST hasil lengkap ke URL itu setelah selesai.
-#
-#   3. Kirim companion_payload ke NocoDB. Paling sederhana: set NOCODB_PUSH_ENABLED=1 dan
-#        kirim push_to_nocodb=true di langkah 1 -- worker yang menulis ke NocoDB setelah
-#        ekstraksi selesai, hasilnya di `result.nocodb_push` dan ringkasan job `nocodb_push`.
-#        Bila n8n menulis sendiri: ikuti insert_order di dol-schema/generated/schema.json,
-#        tukar `_<induk>_ref` dengan Id induk, dan pakai JUDUL kolom (`columns[].label`)
-#        sebagai kunci -- API NocoDB tidak mengenal nama teknis. Contoh lengkapnya
-#        app/companion/nocodb_push.py.
-#
-# Kalau webhook tidak bisa dipakai (n8n di belakang NAT), ganti node 2 dengan
-# Wait 60 detik + HTTP Request GET /api/v1/jobs/{job_id} di dalam loop sampai
-# status == "done". Sertakan `?include_result=true` hanya pada pengambilan terakhir.
+# Integrasi n8n (jalur asinkron): POST /api/v1/jobs -> callback_url atau polling
+# GET /api/v1/jobs/{job_id}. Rangkaian node lengkap ada di docs/INTEGRASI_N8N.md.
 
 
 def _run_job(job: Job) -> dict:

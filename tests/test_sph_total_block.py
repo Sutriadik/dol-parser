@@ -2,8 +2,8 @@
 Blok ringkasan harga SPH yang OCR-nya terpecah -- kasus nyata SPH PT Vendor A.
 
 Rantai kegagalan yang dijaga tes ini:
-1. Docling mengeluarkan potongan "PPN 11% / 61,25 / Total Beban Pekerjaan / 3 / ,708 /
-   618,105,600" dalam urutan melompat, lalu LLM menyambung digitnya jadi 6.125.708.618.
+1. Docling mengeluarkan potongan "PPN 11% / 52,43 / Total Beban Pekerjaan / 7 / ,916 /
+   533,218,400" dalam urutan melompat, lalu LLM menyambung digitnya jadi 5.243.916.533.
 2. Sanity guard "memperbaikinya" dengan subtotal x tarif -- angka yang tidak ada di dokumen.
 3. Karena angka karangan itu konsisten, validasi aritmetika meloloskannya sebagai `pass`.
 """
@@ -20,22 +20,23 @@ def _b(text, xmin, ymin, xmax, ymax):
     return DraftBlock(type="paragraph", text=text, bbox=(xmin, ymin, xmax, ymax), confidence=0.9)
 
 
-# Urutan dan koordinat persis seperti keluaran Docling untuk halaman 1 SPH PT Vendor A.
+# Urutan dan koordinat persis seperti keluaran Docling untuk halaman 1 SPH PT Vendor A;
+# digitnya diganti angka rekaan dengan pola potongan yang sama.
 SPH_VENDOR = [
     _b("PPN 11%", 0.15836, 0.53764, 0.24354, 0.54936),
-    _b("61,25", 0.76227, 0.53764, 0.81887, 0.54936),
+    _b("52,43", 0.76227, 0.53764, 0.81887, 0.54936),
     _b("Total Beban Pekerjaan", 0.15836, 0.5583, 0.3619, 0.57002),
-    _b("3", 0.81887, 0.53781, 0.82915, 0.54933),
-    _b(",708", 0.82915, 0.53764, 0.87032, 0.54936),
-    _b("618,105,600", 0.76227, 0.5583, 0.87032, 0.57002),
+    _b("7", 0.81887, 0.53781, 0.82915, 0.54933),
+    _b(",916", 0.82915, 0.53764, 0.87032, 0.54936),
+    _b("533,218,400", 0.76227, 0.5583, 0.87032, 0.57002),
 ]
 
 
-# --------------------------------------------------------------------- lapisan 1: urutan baca
+# lapisan 1: urutan baca
 def test_blok_total_terpecah_disusun_per_baris_dan_angkanya_utuh():
     merged = merge_adjacent_blocks(SPH_VENDOR)
     assert len(merged) == 1
-    assert merged[0].text == "PPN 11% 61,253,708\nTotal Beban Pekerjaan 618,105,600"
+    assert merged[0].text == "PPN 11% 52,437,916\nTotal Beban Pekerjaan 533,218,400"
 
 
 def test_paragraf_berurutan_normal_tidak_diubah():
@@ -71,13 +72,13 @@ def test_angka_tidak_bersentuhan_dipisah_spasi():
     assert lines[0] == "Total 2 5.000"
 
 
-# --------------------------------------------------------------------- lapisan 2: tanpa karangan
+# lapisan 2: tanpa karangan
 def test_guard_mengosongkan_bukan_menghitung_ulang():
     ext = SimpleNamespace(
-        subtotal=604_800_000.0,
+        subtotal=519_600_000.0,
         persentase_ppn="11%",
-        ppn_nominal=6_125_708_618.1056,
-        grand_total=6_125_708_618.1056,
+        ppn_nominal=5_243_916_533.2184,
+        grand_total=5_243_916_533.2184,
     )
     OllamaExtractor._sanitize_sph_totals(ext)
     assert ext.ppn_nominal is None
@@ -86,17 +87,17 @@ def test_guard_mengosongkan_bukan_menghitung_ulang():
 
 def test_guard_membiarkan_nilai_wajar():
     ext = SimpleNamespace(
-        subtotal=604_800_000.0,
+        subtotal=519_600_000.0,
         persentase_ppn="11%",
-        ppn_nominal=61_253_708.0,
-        grand_total=618_105_600.0,
+        ppn_nominal=52_437_916.0,
+        grand_total=533_218_400.0,
     )
     OllamaExtractor._sanitize_sph_totals(ext)
-    assert ext.ppn_nominal == 61_253_708.0
-    assert ext.grand_total == 618_105_600.0
+    assert ext.ppn_nominal == 52_437_916.0
+    assert ext.grand_total == 533_218_400.0
 
 
-# --------------------------------------------------------------------- lapisan 3: validasi
+# lapisan 3: validasi
 def _ev(field, value, status):
     return SimpleNamespace(field=field, value=value, status=status)
 
@@ -106,18 +107,18 @@ def test_nominal_tidak_ditemukan_di_dokumen_tidak_lolos_pass():
     data = {
         "Nomor SPH": "01/SPH",
         "Vendor": {"Nama Vendor": "PT Vendor A"},
-        "Subtotal": 604_800_000,
+        "Subtotal": 519_600_000,
         "Persentase PPN": "11%",
-        "Nilai PPN": 66_528_000,
-        "Grand Total": 671_328_000,
+        "Nilai PPN": 57_156_000,
+        "Grand Total": 576_756_000,
     }
     report = validate_sph(data)
     assert report.status == "pass"  # aritmetika memang konsisten
 
     evidence = [
-        _ev("Subtotal", 604_800_000, FieldStatus.AUTO_VERIFIED),
-        _ev("Nilai PPN", 66_528_000, FieldStatus.UNSUPPORTED),
-        _ev("Grand Total", 671_328_000, FieldStatus.UNSUPPORTED),
+        _ev("Subtotal", 519_600_000, FieldStatus.AUTO_VERIFIED),
+        _ev("Nilai PPN", 57_156_000, FieldStatus.UNSUPPORTED),
+        _ev("Grand Total", 576_756_000, FieldStatus.UNSUPPORTED),
     ]
     report = check_amounts_grounded(report, "sph", evidence)
     assert report.status == "warn"
@@ -126,20 +127,20 @@ def test_nominal_tidak_ditemukan_di_dokumen_tidak_lolos_pass():
 
 
 def test_nilai_tertulis_di_dokumen_tapi_tidak_konsisten_ditandai_gagal():
-    """Nilai asli vendor A: 604,8 jt + 61,25 jt != 618,1 jt. Dokumennya sendiri tidak
-    konsisten -- hasil yang jujur adalah `fail` (PM meninjau), bukan `pass`."""
+    """Pola nilai vendor A (angka rekaan): 519,6 jt + 52,44 jt != 533,2 jt. Dokumennya
+    sendiri tidak konsisten -- hasil yang jujur adalah `fail` (PM meninjau), bukan `pass`."""
     data = {
         "Nomor SPH": "01/SPH",
         "Vendor": {"Nama Vendor": "PT Vendor A"},
-        "Subtotal": 604_800_000,
+        "Subtotal": 519_600_000,
         "Persentase PPN": "11%",
-        "Nilai PPN": 61_253_708,
-        "Grand Total": 618_105_600,
+        "Nilai PPN": 52_437_916,
+        "Grand Total": 533_218_400,
     }
     assert validate_sph(data).status == "fail"
 
 
-# --------------------------------------------------------------------- lapisan 4: nominal LLM
+# lapisan 4: nominal LLM
 def test_subtotal_llm_yang_tidak_tertulis_di_dokumen_dikosongkan():
     """
     SPH jasa: dokumen hanya menulis "Jumlah Setelah PPN" tanpa baris subtotal, tetapi LLM
@@ -164,13 +165,13 @@ def test_nominal_yang_hanya_tertulis_sebagai_terbilang_dibiarkan():
 
 
 def test_nominal_tertulis_berformat_lain_dibiarkan():
-    md = "Sub Total Rp 604,800,000\nPPN 11% Rp. 61.253.708,-\nTotal 618.105.600,00"
+    md = "Sub Total Rp 519,600,000\nPPN 11% Rp. 52.437.916,-\nTotal 533.218.400,00"
     ext = SimpleNamespace(
-        subtotal=604_800_000.0, ppn_nominal=61_253_708.0, grand_total=618_105_600.0
+        subtotal=519_600_000.0, ppn_nominal=52_437_916.0, grand_total=533_218_400.0
     )
     OllamaExtractor._drop_unwritten_sph_totals(ext, md)
     assert (ext.subtotal, ext.ppn_nominal, ext.grand_total) == (
-        604_800_000.0,
-        61_253_708.0,
-        618_105_600.0,
+        519_600_000.0,
+        52_437_916.0,
+        533_218_400.0,
     )

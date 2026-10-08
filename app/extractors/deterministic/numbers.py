@@ -105,9 +105,7 @@ def amounts_equal(a: float | None, b: float | None, tolerance: float = 1.0) -> b
     return abs(a - b) <= tolerance
 
 
-# ============================================================================
 # Terbilang (angka dalam kata) — dipakai validator untuk cek konsistensi total
-# ============================================================================
 
 _UNIT_WORDS = {
     "nol": 0,
@@ -176,7 +174,7 @@ def terbilang_to_number(text: str) -> int | None:
     return total + group + digit
 
 
-# "Rp 738.150.000,- (Tujuh Ratus Tiga Puluh Delapan Juta Seratus Lima Puluh Ribu Rupiah)"
+# "Rp 642.375.000,- (Enam Ratus Empat Puluh Dua Juta Tiga Ratus Tujuh Puluh Lima Ribu Rupiah)"
 _AMOUNT_WITH_WORDS = re.compile(
     r"Rp[\s.:]*(\d[\d.,]*\d)\s*,?-*\s*\(([^()]{5,250}?)\)", re.IGNORECASE
 )

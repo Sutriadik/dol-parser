@@ -45,13 +45,9 @@ class AppConfig(BaseModel):
     # dipakai hanya sebagai fallback.
     DEFAULT_PARSER: str = os.getenv("DEFAULT_PARSER", "docling")
     PARSER_NUM_THREADS: int = _env_int("PARSER_NUM_THREADS", max(1, (os.cpu_count() or 4) - 2))
-    # SATU tombol pemilihan mesin OCR: rapidocr | mac | tesseract | paddle | auto
-    # Bisa juga dioper sebagai argumen Python: engine.parse(pdf, ocr="tesseract").
-    #
-    # Default rapidocr (BUKAN mac/auto) supaya hasil di laptop pengembang sama dengan hasil
-    # di server produksi Linux/Windows. Apple Vision lebih cepat & sedikit lebih akurat, tapi
-    # hanya ada di macOS -- kalau dijadikan default, setiap angka akurasi yang kita ukur di
-    # laptop jadi janji yang tidak bisa ditepati produksi.
+    # Pemilihan mesin OCR: rapidocr | mac | tesseract | paddle | auto (atau engine.parse(pdf,
+    # ocr=...)). Default rapidocr supaya akurasi yang diukur di laptop sama dengan server
+    # Linux/Windows; Apple Vision (mac) lebih cepat tapi hanya ada di macOS.
     OCR_ENGINE: str = os.getenv("OCR_ENGINE", "rapidocr")
     DEFAULT_DPI: int = 150
     OCR_LANG: str = os.getenv("OCR_LANG", "en")
@@ -77,11 +73,9 @@ class AppConfig(BaseModel):
     # PP-Structure Layout Analysis settings
     ENABLE_LAYOUT_ANALYSIS: bool = True  # Gunakan PPStructure untuk scanned docs (fallback engine)
 
-    # --- Keamanan API (dipanggil n8n) ------------------------------------------------
-    # development | production. Di production, kelonggaran yang memudahkan pengembangan di
-    # laptop dimatikan: API key wajib (server menolak naik tanpanya), callback hanya ke host
-    # di CALLBACK_ALLOWED_HOSTS, dan galat 500 hanya membalas nomor rujukan -- pesan
-    # exception bisa memuat potongan isi kontrak atau path server.
+    # Keamanan API. Di production: API key wajib (server menolak naik tanpanya), callback hanya ke
+    # CALLBACK_ALLOWED_HOSTS, dan galat 500 hanya membalas nomor rujukan supaya potongan kontrak
+    # atau path server tidak bocor.
     ENV: str = os.getenv("OPENADE_ENV", "development").strip().lower()
     # Bila diisi, setiap endpoint /api/v1/* selain health wajib mengirim header
     # `X-API-Key`. Sengaja BUKAN default acak: server yang diam-diam menolak semua

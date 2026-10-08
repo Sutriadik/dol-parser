@@ -2,12 +2,12 @@
 Open ADE — Deteksi salinan ganda di dalam satu berkas.
 
 Kontrak "half signed" sering dipindai dua kali ke satu PDF (salinan untuk tiap pihak).
-KONTRAK_HALF_SIGNED_ST_108.pdf berisi 16 halaman = kontrak 8 halaman x 2. Tanpa deteksi ini
+Satu kontrak nyata berisi 16 halaman = kontrak 8 halaman x 2. Tanpa deteksi ini
 LLM melihat setiap item dua kali: 12 baris rincian padahal 6, dan jumlah harga item tidak
 lagi cocok dengan nilai kontrak.
 
 Kemiripan dihitung dari KUMPULAN kata, bukan urutan teks: OCR salinan kedua sering
-menghasilkan urutan baca berbeda. Pada ST_108 perbandingan berurutan hanya memberi 0,05-0,22
+menghasilkan urutan baca berbeda. Pada kontrak itu perbandingan berurutan hanya memberi 0,05-0,22
 untuk beberapa pasangan salinan, sedangkan kumpulan kata memberi 0,78-0,99 -- jauh dari
 halaman bertetangga yang memang berbeda (0,04-0,30).
 """

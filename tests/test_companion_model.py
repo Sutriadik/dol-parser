@@ -34,7 +34,7 @@ MD_FORMAT_KAMPUS = "PIHAK KEDUA menyerahkan kepada PIHAK PERTAMA hasil Pengadaan
 MD_FORMAT_TELKOM = "... Selanjutnya PIHAK PERTAMA\n\n## MENYERAHKAN\n\nKepada PIHAK KEDUA ..."
 
 
-# ---------------------------------------------------------------- arah & peran
+# arah & peran
 def test_format_kampus_but_di_pihak_kedua_tetap_bast_pelanggan():
     """
     Regresi ke bug nyata di pemeta ini. Versi pertama menurunkan arah dari POSISI BUT:
@@ -67,7 +67,7 @@ def test_kalimat_tidak_terbaca_tidak_menebak_arah():
     assert detect_handover_party("teks tanpa pola") is None
 
 
-# ---------------------------------------------------------------- tanggal
+# tanggal
 @pytest.mark.parametrize(
     "teks,harapan",
     [
@@ -87,7 +87,7 @@ def test_tanggal_tak_terbaca_jadi_none_bukan_tebakan(teks):
     assert parse_indonesian_date(teks) is None
 
 
-# ---------------------------------------------------------------- model & DDL
+# model & DDL
 def test_urutan_insert_induk_sebelum_anak():
     urut = insert_order()
     assert urut.index("document") < urut.index("bast")
@@ -120,7 +120,7 @@ def test_setiap_fk_menunjuk_tabel_yang_ada():
                 assert c.fk.split(".")[0] in nama, f"{t.name}.{c.name} -> {c.fk}"
 
 
-# ---------------------------------------------------------------- validator
+# validator
 def _payload_minimal():
     return map_bast(
         {

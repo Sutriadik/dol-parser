@@ -34,7 +34,7 @@ Riwayat Pemrosesan (hanya PostgreSQL). Kolom per tabel: `../dol-schema/generated
 
 ---
 
-## Langkah 1 — Token
+## Langkah 1: Token
 
 NocoDB → foto profil → **Account Settings → Tokens → Add New Token**. Isi di `.env`:
 
@@ -43,7 +43,7 @@ NOCODB_URL=http://localhost:8080
 NOCODB_API_TOKEN=<token>
 ```
 
-## Langkah 2 — Buat base dari dol-schema
+## Langkah 2: Buat base dari dol-schema
 
 ```bash
 make buat-base                     # atau: make buat-base JUDUL="DOL Schema uji"
@@ -73,14 +73,14 @@ tidak mengubahnya di tempat. Buat base baru.
 Pembayaran. Base lama biarkan
 sebagai arsip; jangan dihapus sebelum datanya tidak diperlukan lagi.
 
-## Langkah 3 — Periksa
+## Langkah 3: Periksa
 
 ```bash
 make cek-nocodb        # URL, token, setiap tableId
 make cek-skema         # setiap tabel NocoDB identik dengan dol-schema, kolom per kolom
 ```
 
-## Langkah 4 — Kirim satu dokumen
+## Langkah 4: Kirim satu dokumen
 
 ```bash
 .venv311/bin/python scripts/companion.py --map storage/outputs/extraction/<dok>.extract.json
@@ -91,11 +91,11 @@ make cek-skema         # setiap tabel NocoDB identik dengan dol-schema, kolom pe
 Yang dilakukan pusher (`app/companion/nocodb_push.py`):
 
 1. Validasi payload terhadap dol-schema; gagal = tidak ada yang dikirim.
-2. **Tolak bila dokumen sudah punya Keputusan PM** — proses ulang tidak menimpa dokumen
+2. **Tolak bila dokumen sudah punya Keputusan PM**: proses ulang tidak menimpa dokumen
    yang sedang/sudah diperiksa. Bila PM memang minta diproses ulang: `--timpa-yang-direview`.
 3. Upsert per kunci anti-dobel (dokumen = sidik isi berkas; anak = induk + nomor urut).
 4. Hapus baris anak yang tidak ada lagi di hasil baru (mis. kontrak kini terbaca 3 item,
-   bukan 5) — kecuali masih dirujuk tabel lain.
+   bukan 5), kecuali masih dirujuk tabel lain.
 
 ---
 
@@ -103,8 +103,8 @@ Yang dilakukan pusher (`app/companion/nocodb_push.py`):
 
 1. **Grid Hasil Ekstraksi**, dikelompokkan per **ID Dokumen**, diurutkan **Status Bukti**:
    `bertentangan`, `tidak_ada_di_dokumen`, `perlu_dicek` lebih dulu. `bukti_kuat` artinya
-   nilai *ditemukan* di dokumen — bukan berarti benar; harga tetap wajib dicek.
-2. **Form Keputusan PM** — satu-satunya tempat PM mengetik: Nama Field, Nilai Sistem Saat
+   nilai *ditemukan* di dokumen, bukan berarti benar; harga tetap wajib dicek.
+2. **Form Keputusan PM**: satu-satunya tempat PM mengetik: Nama Field, Nilai Sistem Saat
    Diperiksa, Keputusan (`benar` / `dikoreksi` / `ditolak`), Nilai Final, Diperiksa Oleh,
    Waktu Diperiksa, Catatan PM.
 3. **Hak akses:** PM peran Editor. Token pipeline idealnya tanpa akses tulis ke Keputusan PM
@@ -115,14 +115,14 @@ Yang dilakukan pusher (`app/companion/nocodb_push.py`):
 ## Keputusan yang masih terbuka: PostgreSQL di bawah NocoDB?
 
 Tabel yang dibuat lewat API NocoDB (langkah 2) **hanya punya kolom**: tanpa UNIQUE, CHECK,
-foreign key, maupun view. Integritasnya dijaga pengirim — validator dol-schema dan pusher.
+foreign key, maupun view. Integritasnya dijaga pengirim: validator dol-schema dan pusher.
 Kolom "ID Kontrak" berisi angka, bukan tautan yang bisa diklik.
 
 Alternatifnya: jalankan `../dol-schema/generated/schema.sql` di PostgreSQL dan sambungkan
 NocoDB sebagai *external data source*. Constraint dan view (`document_review_status`,
-`nilai_terverifikasi`) lalu benar-benar berlaku. Konsekuensinya: NocoDB membuat judul kolom
+`nilai_terverifikasi`) lalu berlaku. Konsekuensinya: NocoDB membuat judul kolom
 dari nama kolom DB, jadi judul Indonesia harus diatur ulang di UI, dan pipeline sebaiknya
 menulis langsung ke PostgreSQL (belum ada penulisnya di repo ini).
 
-Ini keputusan #4a di `../dol-schema/docs/WORKSHOP_SKEMA.md` — diputuskan bersama, bukan
+Ini keputusan #4a di `../dol-schema/docs/WORKSHOP_SKEMA.md`, diputuskan bersama, bukan
 sendirian.

@@ -20,7 +20,7 @@ def _halaman_miring(derajat: float) -> np.ndarray:
     for y in range(120, 1300, 45):
         cv2.putText(
             img,
-            "Nilai kontrak Rp 738.150.000 termasuk PPN 11 persen",
+            "Nilai kontrak Rp 642.375.000 termasuk PPN 11 persen",
             (60, y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.9,
