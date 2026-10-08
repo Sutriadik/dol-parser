@@ -1,10 +1,10 @@
-# dol-parser — Parser & Ekstraktor Dokumen Pengadaan (Open ADE)
+# dol-parser: Parser & Ekstraktor Dokumen Pengadaan (Open ADE)
 
 Membaca PDF **Kontrak/SPK dan SPH vendor** lalu mengeluarkan data terstruktur yang tertaut
 ke kutipan sumbernya, siap masuk NocoDB untuk dikonfirmasi PM. BAST juga bisa diekstrak,
 tetapi belum dikirim ke NocoDB: tabelnya masih usulan (lihat repo `dol-schema`).
 
-Ini bagian **AI Engineer** dari Delivery Ops Layer — lapisan otomasi yang berdiri di
+Ini bagian **AI Engineer** dari Delivery Ops Layer, lapisan otomasi yang berdiri di
 sebelah MyBhakti, bukan di dalamnya. Dua komponen lain dipegang rekan setim:
 n8n/numbering (RPA Engineer) dan evidence/ODK (Network Engineer).
 
@@ -165,24 +165,24 @@ seharusnya memvalidasi di jalur itu (FastAPI sebelum callback, atau n8n membaca
    penandatangan, atau hasil uji bawaan. Sistem juga tidak menghitung nilai yang tidak
    tertulis di dokumen (mis. PPN dari total − subtotal).
 4. **MyBhakti tidak pernah disentuh.** Klien/Vendor/Proyek/PO hanya kolom rujukan
-   `mybhakti_*_ref` yang diisi n8n — pipeline tidak pernah mengirimnya, supaya isian n8n
+   `mybhakti_*_ref` yang diisi n8n: pipeline tidak pernah mengirimnya, supaya isian n8n
    tidak terhapus saat proses ulang.
 5. **Baseline diukur sebelum apa pun diubah.** `eval/` membandingkan hasil terhadap golden
    set; golden yang belum dikoreksi manusia tidak ikut dihitung.
 
 ### Status bukti per field
 
-Setiap field keluar dengan status yang menyatakan **seberapa kuat buktinya di dokumen** —
+Setiap field keluar dengan status yang menyatakan **seberapa kuat buktinya di dokumen**,
 bukan apakah nilainya benar. Persetujuan tetap milik PM.
 
 | Di pipeline | Tampil di NocoDB | Artinya | Prioritas review |
 |---|---|---|---|
-| `AUTO_VERIFIED` | `bukti_kuat` | ditemukan persis di dokumen, lolos semua aturan | rendah — **harga tetap wajib dicek** |
+| `AUTO_VERIFIED` | `bukti_kuat` | ditemukan persis di dokumen, lolos semua aturan | rendah; **harga tetap wajib dicek** |
 | `AUTO_ACCEPTED` | `bukti_cukup` | bukti kuat tapi tidak persis | rendah |
 | `REVIEW_REQUIRED` | `perlu_dicek` | bukti lemah, atau ada aturan yang memberi peringatan | sedang |
 | `UNSUPPORTED` | `tidak_ada_di_dokumen` | **nilai tidak ditemukan di satu blok pun** | **tertinggi** |
 | `CONFLICT` | `bertentangan` | melanggar aturan konsistensi | tinggi |
-| `MISSING` | `kosong` | tidak terisi | — |
+| `MISSING` | `kosong` | tidak terisi | - |
 
 `bukti_kuat` memeriksa **keberadaan**, bukan **peran**: nomor kontrak yang salah tetap
 `bukti_kuat` bila nomor lain di dokumen kebetulan sama. Karena itu namanya tidak memakai
@@ -243,7 +243,7 @@ make eval
 ## Keamanan
 
 - **`.env` tidak pernah di-commit.** Repo ini publik. Rujukannya `.env.example`.
-- **Data klien tidak pernah masuk git** — `sample_pdfs/`, `storage/outputs/`,
+- **Data klien tidak pernah masuk git**: `sample_pdfs/`, `storage/outputs/`,
   `eval/golden/`, `storage/data_project_*.json` semuanya di-ignore.
 - **Isi `OPENADE_API_KEY`** sebelum service dijangkau dari luar localhost. Di server, pakai
   `OPENADE_ENV=production`: tanpa API key server menolak naik, `callback_url` dibatasi ke
