@@ -108,6 +108,19 @@ def test_entity_hints_skip_lowercase_bank_and_notary_phrase():
     assert "Lokasi" not in hints
 
 
+def test_judul_kolom_tabel_nama_pekerjaan_bukan_hint_nama_pekerjaan():
+    md = (
+        "Perihal : Pengadaan Lisensi Contoh untuk Dinas Rekaan Tahun 2031\n\n"
+        "Rincian Pekerjaan\n\n"
+        "| No | Nama Pekerjaan | Pelanggan | Qty | Harga Total |\n"
+        "|:--:|:---|:---|:---|---:|\n"
+        "| 1 | Lisensi Contoh 100 akun | Dinas Rekaan | 1 | Rp 1.000.000 |\n"
+    )
+    hint = ContextAnalyzer().get_entity_hints(md).get("Nama Pekerjaan") or ""
+    assert "|" not in hint
+    assert "Pengadaan Lisensi Contoh" in hint
+
+
 def test_labeled_party_blocks():
     md = (
         "maka kami yang bertanda tangan dibawah ini :\nNama : Rina Kartika\nJabatan : Kepala "
@@ -581,6 +594,24 @@ def test_party_extraction_handles_pihak_kesatu_synonym():
     parties = ContextAnalyzer.extract_parties_from_preamble(md)
     assert parties["pihak_pertama"]["nama_perusahaan"] == "PT CONTOH SATU"
     assert parties["pihak_kedua"]["nama_perusahaan"] == "CV CONTOH DUA"
+
+
+def test_angka_satu_di_dalam_npwp_bukan_penanda_pihak_pertama():
+    md = (
+        "Pada hari ini bertempat di Semarang, antara pihak-pihak:\n\n"
+        "- PERUSAHAAN PERSEROAN (PERSERO) PT CONTOH NUSANTARA Tbk, NPWP: 01.234.567.8-901.000, "
+        "berkedudukan di Jalan Merpati Nomor 1 Semarang 50111, sebagaimana diubah dengan Akta "
+        "PT Contoh Nusantara Tbk Nomor 12 tanggal 3 Mei 2030, dalam perbuatan hukum ini "
+        'diwakili secara sah oleh RINA, Jabatan DIREKTUR, selanjutnya disebut "TELKOM"\n'
+        "- II. PT DATA CONTOH, NPWP: 0312.4567.8901.2000, beralamat di Jalan Kenanga No. 7 "
+        "Surakarta, dalam perbuatan hukum ini diwakili secara sah oleh BAYU, Jabatan DIREKTUR, "
+        'selanjutnya disebut "BUT".\n'
+        "Para Pihak terlebih dahulu menerangkan hal-hal sebagai berikut:\n"
+    )
+    pertama = ContextAnalyzer.extract_parties_from_preamble(md).get("pihak_pertama") or {}
+    # Lebih baik tanpa hint daripada hint "PT ... Tbk Nomor 12 tanggal 3 Mei 2030" yang
+    # disalin LLM ke hasil.
+    assert "tanggal" not in (pertama.get("nama_perusahaan") or "")
 
 
 def test_contract_schema_allows_minimal_nota_pesanan_without_hallucination_fields():
