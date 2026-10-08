@@ -1,7 +1,7 @@
 """
 Perulangan tak berujung dari LLM tidak boleh menggagalkan seluruh dokumen.
 
-Kasus nyata KONTRAK_HALF_SIGNED_ST_108 (30 Sep 2026): model menulis alamat Pihak Pertama
+Kasus nyata kontrak pindaian 16 halaman (30 Sep 2026): model menulis alamat Pihak Pertama
 lalu "0812345678901234567890..." sampai kuota 4.096 token habis. JSON terpotong, pass 1
 melempar ValidationError, dan dokumen 16 halaman gagal total setelah ±10 menit.
 """
@@ -11,8 +11,8 @@ from app.extractors.ollama_client import OllamaExtractor
 from app.schemas.contract import ContractExtractionSchema
 
 TERPOTONG = (
-    '{\n  "Pihak Pertama": {\n    "Nama Perusahaan": "UNIVERSITAS TELKOM",\n'
-    '    "Alamat": "Jalan Telekomunikasi Nomor 1, 0812345678901234567890123456789'
+    '{\n  "Pihak Pertama": {\n    "Nama Perusahaan": "UNIVERSITAS CONTOH",\n'
+    '    "Alamat": "Jalan Merpati Raya Nomor 1, 0812345678901234567890123456789'
 )
 
 
@@ -53,13 +53,13 @@ def test_field_panjang_mendapat_batas_lebih_longgar():
 
 def test_sisa_deret_angka_dibuang_dari_nilai():
     alamat = (
-        "Jalan Telekomunikasi Nomor 1 Terusan Buah Batu Bandung, Indonesia, "
+        "Jalan Merpati Raya Nomor 1 Kelurahan Contoh Semarang, Indonesia, "
         "081234567890123456789012345678901234567890"
     )
     bersih = OllamaExtractor._strip_runaway_digits({"Pihak Pertama": {"Alamat": alamat}})
     assert (
         bersih["Pihak Pertama"]["Alamat"]
-        == "Jalan Telekomunikasi Nomor 1 Terusan Buah Batu Bandung, Indonesia"
+        == "Jalan Merpati Raya Nomor 1 Kelurahan Contoh Semarang, Indonesia"
     )
 
 

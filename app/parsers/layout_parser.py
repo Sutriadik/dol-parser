@@ -353,7 +353,7 @@ class LayoutParser:
 # Perender markdown untuk region PP-Structure
 # ============================================================================
 #
-# Kenapa label region TIDAK dipakai mentah-mentah: pada SPK ATS Oracle, PP-Structure
+# Kenapa label region TIDAK dipakai mentah-mentah: pada SPK lisensi perangkat lunak, PP-Structure
 # memberi label "footer" pada "3. WAKTU PELAKSANAAN" dan "Jangka waktu akses selama 29
 # Mei 2026..." (y=0,72-0,78), dan label "header" pada "Nama Budi Santoso Wijaya" /
 # "Jabatan : Direktur..." (y=0,19-0,35). Kalau semua "footer" dibungkus komentar seperti

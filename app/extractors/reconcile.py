@@ -152,10 +152,10 @@ def prefer_confirmed_amount(extracted: BaseModel, attr: str, markdown_text: str)
     LLM kosong atau tidak tertulis di dokumen, dan dokumen memuat tepat satu nominal
     terkonfirmasi.
 
-    Kasus nyata ST_108: dokumen menulis "Rp 738.150.000,- (Tujuh Ratus Tiga Puluh Delapan
-    Juta Seratus Lima Puluh Ribu Rupiah)", tetapi LLM mengembalikan 1.130.000.000 -- angka
-    yang tidak ada di mana pun di dokumen. Nilai LLM yang tertulis di dokumen tidak pernah
-    diganti: aturan ini hanya menambal karangan, tidak menebak ulang yang sudah terbukti.
+    Kasus nyata (kontrak pindaian dua salinan): dokumen menulis nilai kontrak sebagai angka
+    beserta terbilangnya, tetapi LLM mengembalikan 1.130.000.000 -- angka yang tidak ada di
+    mana pun di dokumen. Nilai LLM yang tertulis di dokumen tidak pernah diganti: aturan ini
+    hanya menambal karangan, tidak menebak ulang yang sudah terbukti.
     """
     confirmed = confirmed_amounts(markdown_text)
     if len(confirmed) != 1:
@@ -226,8 +226,8 @@ def sanitize_sph_totals(ext: "SPHExtractionSchema") -> None:
     Kosongkan PPN / Grand Total yang absurd dari LLM. JANGAN menghitung ulang.
 
     Versi sebelumnya mengganti nilai absurd dengan subtotal × tarif. Hasilnya angka yang
-    tidak pernah tertulis di dokumen (SPH PT Vendor A: PPN 66.528.000 dan Grand Total
-    671.328.000, padahal dokumen menulis 61.253.708 dan 618.105.600), dan karena angka
+    tidak pernah tertulis di dokumen (SPH PT Vendor A: PPN 57.156.000 dan Grand Total
+    576.756.000, padahal dokumen menulis 52.437.916 dan 533.218.400), dan karena angka
     karangan itu saling konsisten, validasi aritmetika meloloskannya dengan status `pass`.
     Nilai kosong justru jujur: ia muncul sebagai field hilang yang harus diisi PM.
     """

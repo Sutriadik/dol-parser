@@ -116,7 +116,7 @@ def _union_bbox(boxes: list[BBox]) -> BBox | None:
 # prosa. Prosa dua kolom yang sejajar tidak boleh diselang-seling baris per baris.
 ROW_FRAGMENT_MAX_CHARS = 40
 # Dua potongan dianggap satu angka yang terpotong OCR bila celah horizontalnya lebih
-# kecil dari ini (fraksi lebar halaman) -- "61,25" + "3" + ",708" hampir bersentuhan.
+# kecil dari ini (fraksi lebar halaman) -- "52,43" + "7" + ",916" hampir bersentuhan.
 NUMBER_JOIN_MAX_GAP = 0.004
 _NUMERIC_FRAGMENT = re.compile(r"^[\d.,]+$")
 
@@ -130,7 +130,7 @@ def _same_row(a: DraftBlock, b: DraftBlock) -> bool:
 
 def _join_row(row: list[DraftBlock]) -> str:
     """Satu baris visual kiri->kanan. Potongan angka yang bersentuhan disambung tanpa
-    spasi ("61,25"+"3"+",708" -> "61,253,708"); potongan lain dipisah satu spasi."""
+    spasi ("52,43"+"7"+",916" -> "52,437,916"); potongan lain dipisah satu spasi."""
     text = row[0].text.strip()
     for prev, cur in zip(row, row[1:]):
         piece = cur.text.strip()
@@ -146,8 +146,8 @@ def _group_text(members: list[DraftBlock]) -> str:
 
     Pengecualian: blok ringkasan harga dua kolom (label kiri, nilai kanan) yang OCR-nya
     terpecah. Docling bisa mengeluarkan potongannya melompat-lompat -- SPH PT Vendor A
-    menghasilkan "PPN 11%\\n61,25\\nTotal Beban Pekerjaan\\n3\\n,708\\n618,105,600", lalu LLM
-    menyambung digitnya jadi PPN 6.125.708.618. Kalau urutan mentahnya MUNDUR secara
+    menghasilkan "PPN 11%\\n52,43\\nTotal Beban Pekerjaan\\n7\\n,916\\n533,218,400", lalu LLM
+    menyambung digitnya jadi PPN 5.243.916.533. Kalau urutan mentahnya MUNDUR secara
     vertikal dan semua potongannya pendek, potongan disusun ulang per baris visual.
     """
     texts = [m for m in members if m.text]

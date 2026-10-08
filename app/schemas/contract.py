@@ -211,7 +211,7 @@ class ContractExtractionSchema(BaseModel):
     cabang_bank: str | None = Field(
         None,
         alias="Lokasi Cabang Bank",
-        description="Lokasi cabang bank (misal: KK STT Telkom / Bandung Martadinata)",
+        description="Lokasi cabang bank (misal: KK Kampus Contoh / Semarang Pandanaran)",
     )
     nomor_rekening: str | None = Field(
         None, alias="Nomor Rekening Bank", description="Nomor rekening bank penyedia"

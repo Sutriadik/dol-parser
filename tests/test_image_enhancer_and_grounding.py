@@ -67,7 +67,7 @@ def test_enhance_contrast_and_lighting():
 
 def test_sharpen_and_denoise():
     img = np.ones((100, 200, 3), dtype=np.uint8) * 240
-    cv2.putText(img, "Rp 140.400.000", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+    cv2.putText(img, "Rp 130.200.000", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
     sharpened = sharpen_and_denoise(img)
     assert sharpened is not None

@@ -202,15 +202,15 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 ### Validasi `fail` padahal nilainya terlihat benar
 
-- Periksa dulu dokumen aslinya. Contoh nyata: SPH PT Vendor A menulis subtotal 604,8 jt,
-  PPN 61,25 jt, dan total 618,1 jt — **dokumen vendornya sendiri tidak konsisten**. Sistem
-  benar menandainya `CONFLICT`; keputusan ada di PM.
+- Periksa dulu dokumen aslinya. Contoh nyata (angka disamarkan): SPH PT Vendor A menulis
+  subtotal 519,6 jt, PPN 52,44 jt, dan total 533,2 jt — **dokumen vendornya sendiri tidak
+  konsisten**. Sistem benar menandainya `CONFLICT`; keputusan ada di PM.
 
 ### `Berkas berisi salinan ganda: halaman X-Y mengulang halaman sebelumnya dan tidak ikut diekstrak.`
 
 - **Artinya:** PDF berisi dua salinan dokumen yang sama (umum pada kontrak "half signed"
   yang dipindai untuk tiap pihak). Hanya salinan pertama yang dibaca AI; tanpa ini setiap
-  item terhitung dua kali. Contoh: `KONTRAK_HALF_SIGNED_ST_108.pdf`, 16 halaman = 8 × 2.
+  item terhitung dua kali. Contoh: sebuah kontrak 16 halaman = 8 × 2.
 - **Yang perlu dilakukan PM:** buka halaman yang disebut dan pastikan isinya memang sama.
   Bila salinan kedua ternyata **revisi** (harga atau tanggal berbeda), proses ulang dengan
   PDF yang hanya berisi versi terbaru.
@@ -218,7 +218,7 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 ### `Invalid JSON: EOF while parsing a string` / nilai berisi `0123456789012345…`
 
 - **Penyebab:** LLM terjebak mengulang deret angka di satu field sampai kuota token habis,
-  sehingga JSON terpotong. Contoh nyata: `KONTRAK_HALF_SIGNED_ST_108.pdf` — alamat Pihak
+  sehingga JSON terpotong. Contoh nyata: kontrak pindaian 16 halaman — alamat Pihak
   Pertama diikuti `0812345678901234567890…`; dokumen 16 halaman gagal total.
 - **Status:** diperbaiki 30 Sep 2026 dengan tiga lapis: setiap field teks diberi batas
   panjang di skema yang dikirim ke Ollama; deret angka ≥ 20 digit tanpa pemisah dibuang
@@ -228,8 +228,8 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 
 ### Angka uang raksasa atau digit yang tersambung
 
-- **Penyebab (sudah diperbaiki 29 Sep 2026):** OCR memecah angka seperti `61,253,708` menjadi
-  potongan `61,25` / `3` / `,708`, lalu LLM menyambungnya dengan angka lain.
+- **Penyebab (sudah diperbaiki 29 Sep 2026):** OCR memecah angka seperti `52,437,916` menjadi
+  potongan `52,43` / `7` / `,916`, lalu LLM menyambungnya dengan angka lain.
 - Bila muncul lagi pada dokumen baru, laporkan dengan nama berkasnya — kemungkinan tata
   letak yang belum dikenali `app/parsers/block_grouper.py`.
 

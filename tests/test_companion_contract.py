@@ -221,10 +221,10 @@ def test_syarat_lampiran_membawa_bukti_dan_indeks_asli():
 
 def test_angka_format_inggris_terbaca():
     raw = _sample_contract_extraction()
-    raw["data"]["Total Harga Pekerjaan"] = "618,105,600"
+    raw["data"]["Total Harga Pekerjaan"] = "533,218,400"
     raw["data"]["List Item/Barang"][0]["Harga Satuan"] = "Rp 25.000.000,-"
     payload = map_contract(raw)
-    assert payload["contract"][0]["contract_value"] == 618105600.0
+    assert payload["contract"][0]["contract_value"] == 533218400.0
     assert payload["contract_item"][0]["unit_price"] == 25000000.0
 
 
@@ -544,7 +544,7 @@ def test_jenis_biaya_tidak_menambah_antrean_pm():
     """
     Jenis Biaya diturunkan dari judul kolom tabel. Grounding hanya bisa mencari teks "MRC" di
     dokumen, yang tidak membuktikan apa pun, sehingga setiap item muncul sebagai "perlu dicek"
-    (KL FULL SIGNED: 5 baris tambahan). Nilainya tetap terlihat PM di Rincian Kontrak.
+    (kontrak layanan nyata: 5 baris tambahan). Nilainya tetap terlihat PM di Rincian Kontrak.
     """
     from app.evidence.locator import iter_leaf_fields
 

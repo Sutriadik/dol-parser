@@ -72,8 +72,8 @@ def test_dikenali_sebagai_identifier(teks):
 @pytest.mark.parametrize(
     "teks",
     [
-        "Direktur Aset dan Sustainability",  # jabatan
-        "Pengadaan Perpanjangan Lisensi ATS Oracle Tahun 2026",  # nama pekerjaan
+        "Direktur Operasional",  # jabatan
+        "Pengadaan Perpanjangan Lisensi Basis Data Tahun 2026",  # nama pekerjaan
         "Bandung",
         "",
     ],
@@ -270,7 +270,7 @@ NO_TELKOM, NO_BUT = "K.TEL.012345/HK.810/T1R-0D000000/2025", "77/00/HK-08/BUT/20
 
 def test_dua_nomor_kontrak_tertukar_dikembalikan_ke_peran_benar():
     """
-    Kasus nyata dari `KL FULL SIGNED.pdf`: model memasang nomor BUT sebagai nomor kontrak
+    Kasus nyata dari sebuah kontrak layanan: model memasang nomor BUT sebagai nomor kontrak
     utama dan nomor Telkom sebagai nomor internal — terbalik. Penentunya ada di nomornya
     sendiri: penyedia menyelipkan akronim perusahaannya ("BUT").
     """

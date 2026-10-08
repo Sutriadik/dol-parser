@@ -86,7 +86,7 @@ def test_entity_hints_ignore_address_numbers_and_bare_pt():
     md = (
         "Alamat : Jl. Contoh Raya No. 1, Bandung\n"
         "Akta pendirian tanggal 24 September 1991\n"
-        "Pembayaran ke rekening Bank Mandiri Cabang KK STT Telkom No. 123.00.4567890.1 a.n PT. "
+        "Pembayaran ke rekening Bank Mandiri Cabang Merpati Raya No. 123.00.4567890.1 a.n PT. "
         "BHAKTI UNGGUL TEKNOVASI.\n"
         "Dibuat di : Bandung\nTanggal : 2 Juni 2026\n"
     )
@@ -207,7 +207,7 @@ def test_tables_without_price_columns_are_not_items():
 
 def test_desc_column_found_even_when_no_column_merged_into_it():
     """
-    Regresi ke bug nyata (ditemukan dari benchmark KL FULL SIGNED dengan RapidOCR):
+    Regresi ke bug nyata (ditemukan dari benchmark kontrak layanan dengan RapidOCR):
     tabel structure recognition RapidOCR kadang menggabungkan kolom "No." ke header
     tetangganya jadi satu sel, mis. "Uraian Pekerjaan/ Layanan. No" -- tidak terjadi
     dengan Apple Vision pada dokumen yang sama.
@@ -235,12 +235,12 @@ def test_desc_column_found_even_when_no_column_merged_into_it():
         "| Uraian Pekerjaan/ Layanan. No | Jumlah. | Satuan. | Jangka Waktu Pembayaran (bulan). "
         "| Harga Satuan. | Harga Satuan. MRC OTC | Harga Total. MRC |\n"
         "|---|---|---|---|---|---|---|\n"
-        "| 1 Penyediaan Fortigate 200f | 1 | Paket | 12 | | 20.790.000 | 249.480.000 |\n"
+        "| 1 Penyediaan Fortigate 200f | 1 | Paket | 12 | | 17.350.000 | 208.200.000 |\n"
     )
     items = extract_items_from_markdown_tables(md, doc_type="contract")
     assert items[0]["Deskripsi Item/Barang/Pekerjaan"] == "Penyediaan Fortigate 200f"
     assert items[0]["Nomor Item"] == "1"
-    assert items[0]["Jumlah Harga"] == 249480000.0
+    assert items[0]["Jumlah Harga"] == 208200000.0
 
 
 # ---------------------------------------------------------------- classifier
@@ -419,14 +419,14 @@ def test_sph_line_total_accepts_period_multiplier():
     data = {
         "Nomor SPH": "1",
         "Vendor": {"Nama Vendor": "PT X"},
-        "Subtotal": 178500000,
+        "Subtotal": 159000000,
         "Nilai PPN": 0,
-        "Grand Total": 178500000,
+        "Grand Total": 159000000,
         "Daftar Penawaran Harga": [
             {
                 "Volume / Qty": 1,
-                "Harga Satuan": 14875000,
-                "Total Harga": 178500000,
+                "Harga Satuan": 13250000,
+                "Total Harga": 159000000,
                 "Periode/Durasi": "12 Bulan",
             }
         ],
@@ -501,10 +501,15 @@ def test_prompts_do_not_contain_evaluation_documents():
 
 
 # ---------------------------------------------------------------- profiler & eval
-def test_profiler_detects_native_pdf():
-    sample = ROOT / "sample_pdfs" / "SPH Bapenda Jabar 2026.pdf"
-    if not sample.exists():
-        pytest.skip("sample PDF tidak tersedia")
+def test_profiler_detects_native_pdf(tmp_path):
+    import pymupdf
+
+    sample = tmp_path / "sph_native.pdf"
+    with pymupdf.open() as doc:
+        page = doc.new_page()
+        for i in range(12):
+            page.insert_text((72, 72 + i * 20), f"Baris {i}: Surat Penawaran Harga PT Contoh")
+        doc.save(sample)
     from app.ingestion.profiler import profile_document
 
     profile = profile_document(str(sample))

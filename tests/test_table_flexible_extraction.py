@@ -75,10 +75,10 @@ def test_sph_item_detail_flexible_schema():
             "Volume / Qty": 12.0,
             "Satuan": "Unit/Bulan",
             "Periode/Durasi": "12 Bulan",
-            "Harga Satuan": 141500.0,
-            "Total Harga": 57732000.0,
+            "Harga Satuan": 152500.0,
+            "Total Harga": 62220000.0,
             "Keterangan": "Termasuk SLA 99.5%",
-            "Atribut Tambahan": {"Jumlah Titik": 34, "OTC": 0, "MRC": 57732000},
+            "Atribut Tambahan": {"Jumlah Titik": 34, "OTC": 0, "MRC": 62220000},
         }
     )
     assert item.kategori == "A. Penyediaan Router Manage Service"
@@ -101,10 +101,10 @@ def test_contract_item_flexible_schema():
             "volume": 3.0,
             "unit": "Orang.Bulan",
             "Periode/Durasi": "12 Bulan",
-            "Harga Satuan": 11700000.0,
-            "Jumlah Harga": 140400000.0,
+            "Harga Satuan": 10850000.0,
+            "Jumlah Harga": 130200000.0,
             "Keterangan": "Dedicated onsite",
-            "Atribut Tambahan": {"MRC": 11700000, "OTC": 0},
+            "Atribut Tambahan": {"MRC": 10850000, "OTC": 0},
         }
     )
     assert item.kategori == "A. Tenaga Ahli"
@@ -112,7 +112,7 @@ def test_contract_item_flexible_schema():
     assert item.volume == 3.0
     assert item.unit == "Orang.Bulan"
     assert item.periode == "12 Bulan"
-    assert item.extra_attributes["MRC"] == 11700000
+    assert item.extra_attributes["MRC"] == 10850000
 
 
 def test_ollama_client_prepare_effective_text_preserves_tables():
@@ -242,7 +242,7 @@ def test_jenis_biaya_dari_judul_kolom_tempat_angka_berada():
 
 
 def test_judul_yang_menyebut_otc_dan_mrc_sekaligus_tidak_dipakai_menebak():
-    """KL FULL SIGNED: OCR menggabungkan dua judul jadi "Harga Satuan. MRC OTC"."""
+    """Kontrak layanan nyata: OCR menggabungkan dua judul jadi "Harga Satuan. MRC OTC"."""
     from app.parsers.table_extractor import extract_items_from_markdown_tables
 
     md = """

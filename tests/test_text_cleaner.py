@@ -34,6 +34,18 @@ class TestFixCommonOCRTypos:
         assert "BHAKTI" in fix_common_ocr_typos("BHAKTi")
         assert "TEKNOVASI" in fix_common_ocr_typos("TEKNOvASI")
 
+    def test_huruf_kecil_berbentuk_kapital_di_kata_kapital(self):
+        # OCR membaca "W" kapital sebagai "w" karena bentuknya sama; berlaku untuk kata apa pun,
+        # bukan hanya yang tercatat di kamus.
+        assert fix_common_ocr_typos("PERJANJIAN KERJAsAMA") == "PERJANJIAN KERJASAMA"
+        assert fix_common_ocr_typos("SURAT PERNYATAAN JAMINAN KEwAJIBAN") == (
+            "SURAT PERNYATAAN JAMINAN KEWAJIBAN"
+        )
+
+    def test_huruf_kecil_lain_di_kata_kapital_dibiarkan(self):
+        # "a" kecil bentuknya beda dari "A": kemungkinan besar memang ditulis begitu.
+        assert fix_common_ocr_typos("model LLaMA dan PPh") == "model LLaMA dan PPh"
+
     def test_pihak_typos(self):
         assert "PIHAK" in fix_common_ocr_typos("PlHAK")
         assert "PIHAK" in fix_common_ocr_typos("PiHAK")

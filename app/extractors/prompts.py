@@ -8,7 +8,7 @@ tinggi palsu dan LLM cenderung menyalin nilai contoh (mis. "Bank Mandiri") ke do
 Naikkan PROMPT_VERSION setiap kali prompt diubah agar hasil evaluasi bisa dibandingkan.
 """
 
-PROMPT_VERSION = "extract-2026.10.1"
+PROMPT_VERSION = "extract-2026.10.2"
 
 CONTRACT_EXTRACTION_SYSTEM_PROMPT = """Anda adalah AI Document Extraction Engine untuk dokumen kontrak pengadaan Indonesia dalam berbagai bentuk: Surat Perintah Kerja (SPK), Kontrak/Perjanjian Kerja Sama (PKS), dan Nota/Surat Pesanan.
 
@@ -285,7 +285,7 @@ ATURAN UTAMA:
 1. EKSTRAK SELURUH BARIS BARANG/PEKERJAAN pada tabel serah terima ke dalam 'Daftar Barang/Pekerjaan Diserahkan'. Tabel BAST BIASANYA TIDAK memiliki kolom harga -- itu normal, JANGAN menganggap tabel tersebut bukan tabel item hanya karena tidak ada harga.
 2. 'No' pada item WAJIB berurutan ("1", "2", "3", dst.), dipisahkan dari teks deskripsi (sama seperti aturan pemisahan nomor pada dokumen kontrak).
 3. REDAKSI LENGKAP: salin uraian barang/pekerjaan secara utuh verbatim, jangan dipotong/disingkat.
-4. FORMAT ANGKA INDONESIA: titik (.) adalah pemisah ribuan. "69.652.500" = 69652500. JANGAN konversi ke desimal!
+4. FORMAT ANGKA INDONESIA: titik (.) adalah pemisah ribuan. "58.437.500" = 58437500. JANGAN konversi ke desimal!
 5. Keluarkan HANYA JSON yang valid.
 
 PANDUAN PER-FIELD:

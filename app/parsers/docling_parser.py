@@ -113,7 +113,7 @@ _OCR_ENGINES = {
     # menghasilkan output BYTE-IDENTICAL). Model itu buruk untuk teks Latin murni --
     # pada dokumen scan kontrak, satu pasal terbaca "e ean eaan ean an ea" alih-alih
     # "BUT menjamin bahwa...". lang=["latin"] memuat model PP-OCRv5 khusus skrip Latin
-    # dan menurunkan rasio kata rusak dari 18,3% ke 4,7% pada dokumen KL FULL SIGNED penuh
+    # dan menurunkan rasio kata rusak dari 18,3% ke 4,7% pada satu kontrak layanan penuh
     # (setara Apple Vision 3,9%) -- kalimat "berjalan dengan baik...tanggal 02 Januari 2025"
     # yang tadinya hilang total kini terbaca utuh. Angka 12,9->8,0 dari sampel 3 halaman awal
     # tidak dipakai lagi, dokumen penuh menunjukkan perbaikan jauh lebih besar.
@@ -248,7 +248,7 @@ def _blok_tabel(rows: list[list[str]], bbox, confidence: float) -> DraftBlock | 
     """Satu tabel = satu blok, UTUH.
 
     Dulu teksnya dipotong `[:3000]`. Tabel markdown ber-padding cepat melewati batas itu:
-    Lampiran I sebuah kontrak terpotong di tengah sel "5.7", sehingga baris 4-5,
+    Lampiran I sebuah kontrak terpotong di tengah sel "6.2", sehingga baris 4-5,
     subtotal, total, dan termin hilang dari markdown maupun ekstraksi. Batas panjang
     prompt sudah diurus ekstraktor (EFFECTIVE_TEXT_MAX_CHARS), bukan di sini.
     """

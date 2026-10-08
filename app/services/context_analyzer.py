@@ -504,7 +504,7 @@ class ContextAnalyzer:
     # ------------------------------------------------------------------ helpers
     @staticmethod
     def normalize_indonesian_numbers(text: str) -> str:
-        """'Rp 13.500.000,-' -> 'Rp 13500000' tanpa merusak NPWP / nomor rekening."""
+        """'Rp 12.750.000,-' -> 'Rp 12750000' tanpa merusak NPWP / nomor rekening."""
         return normalize_id_money_in_text(text)
 
     def enrich_markdown(self, markdown_text: str) -> str:

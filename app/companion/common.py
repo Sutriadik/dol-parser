@@ -5,7 +5,7 @@ Sebelumnya tiap pemeta punya salinan sendiri, dan salinan itu sudah berbeda diam
 - identitas dokumen: pemeta memakai sha1 berkas, sementara `document_id` yang dibalas ke n8n
   memakai sha256 -- keduanya tidak pernah cocok, jadi n8n tidak bisa menemukan baris NocoDB
   dari `document_id` yang ia pegang;
-- angka: `_num` hanya mengenal format Indonesia ("618,105,600" -> None), padahal
+- angka: `_num` hanya mengenal format Indonesia ("533,218,400" -> None), padahal
   `parse_id_number` di extractors sudah menangani format Indonesia dan Inggris.
 Satu modul, satu perilaku.
 """

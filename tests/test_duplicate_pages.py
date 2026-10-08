@@ -1,5 +1,5 @@
 """
-Berkas berisi dua salinan dokumen yang sama (kasus nyata KONTRAK_HALF_SIGNED_ST_108:
+Berkas berisi dua salinan dokumen yang sama (kasus nyata:
 kontrak 8 halaman dipindai dua kali ke satu PDF 16 halaman).
 """
 
@@ -8,8 +8,8 @@ from app.services.duplicate_pages import PAGE_BREAK, drop_duplicate_copy, find_d
 from app.validation.rules import note_duplicate_pages
 
 HALAMAN = [
-    "kontrak kerjasama pengadaan perpanjangan firewall pihak pertama universitas telkom",
-    "pasal harga nilai kontrak sebesar tujuh ratus tiga puluh delapan juta rupiah",
+    "kontrak kerjasama pengadaan perpanjangan firewall pihak pertama universitas contoh",
+    "pasal harga nilai kontrak sebesar enam ratus empat puluh dua juta rupiah",
     "pasal cara pembayaran termin rekening bank mandiri nomor rekening",
     "lampiran rincian harga firewall premium bundle software upgrade",
 ]
