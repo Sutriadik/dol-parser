@@ -234,11 +234,8 @@ def preprocess_image_for_ocr(
 
     # 1. Deskew
     if auto_deskew:
-        # Panggil estimate_skew_angle LANGSUNG, bukan assess_image_quality: yang terakhir
-        # juga menghitung Laplacian variance, mean, dan std seluruh halaman (sharpness,
-        # brightness, contrast) yang TIDAK dipakai di sini -- murni kerja terbuang pada
-        # setiap halaman. assess_image_quality tetap ada untuk pemanggil yang butuh
-        # laporan kualitas lengkap.
+        # Langsung estimate_skew_angle, bukan assess_image_quality: metrik kualitas lainnya tidak
+        # dipakai di sini dan hanya menambah kerja di setiap halaman.
         gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
         skew_angle = estimate_skew_angle(gray)
         if abs(skew_angle) > 0.5:

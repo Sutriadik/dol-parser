@@ -76,7 +76,7 @@ def _number_match(query: str, item_text: str, ocr_factor: float) -> tuple[float,
     return round(min(0.98, 0.99 * ocr_factor), 3), "number_match"
 
 
-# --------------------------------------------------------------------------- identifier
+# identifier
 # Nomor dokumen, nomor rekening, NPWP, part number. Bentuknya: ada digit, dan dipisah
 # titik/garis miring/strip/spasi.
 _IDENTIFIER_SHAPE = re.compile(r"^(?=.*\d)[\w][\w\s./\-]{4,}$")

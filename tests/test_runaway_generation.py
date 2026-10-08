@@ -20,7 +20,7 @@ def _schema():
     return OllamaExtractor._slim_schema(ContractExtractionSchema, oc.DETERMINISTIC_FIELDS)
 
 
-# --------------------------------------------------------------------- lapis 1: batas panjang
+# lapis 1: batas panjang
 def test_semua_field_teks_diberi_batas_panjang():
     capped = OllamaExtractor._cap_string_lengths(_schema())
     tanpa_batas = []
@@ -74,7 +74,7 @@ def test_nomor_asli_tidak_ikut_dibuang():
     assert OllamaExtractor._strip_runaway_digits(nilai) == nilai
 
 
-# --------------------------------------------------------------------- lapis 2: pass 1 rusak
+# lapis 2: pass 1 rusak
 def test_hasil_kosong_tetap_lolos_validasi():
     kosong = OllamaExtractor._empty_result(ContractExtractionSchema)
     assert kosong.pihak_pertama is not None

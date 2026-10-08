@@ -26,7 +26,7 @@ from app.extractors.deterministic.identifiers import (
 )
 
 
-# --------------------------------------------------------------------- skeleton
+# skeleton
 @pytest.mark.parametrize(
     "a,b",
     [
@@ -54,7 +54,7 @@ def test_pelipatan_ocr_hanya_aktif_bila_diminta():
     assert identifier_skeleton(a, fold_ocr=True) == identifier_skeleton(b, fold_ocr=True)
 
 
-# --------------------------------------------------------------------- deteksi bentuk
+# deteksi bentuk
 @pytest.mark.parametrize(
     "teks",
     [
@@ -84,7 +84,7 @@ def test_kalimat_biasa_bukan_identifier(teks):
     assert not looks_like_document_number(teks)
 
 
-# --------------------------------------------------------------------- normalisasi nilai
+# normalisasi nilai
 @pytest.mark.parametrize(
     "masuk,harap",
     [
@@ -122,7 +122,7 @@ def test_normalisasi_tidak_pernah_menukar_karakter_mirip():
     assert "OD000000" in normalize_document_number("K. TEL.012345/HK.810/T1R-OD000000/2025")
 
 
-# --------------------------------------------------------------------- grounding
+# grounding
 def test_nomor_dengan_spasi_ocr_tetap_ditemukan_di_dokumen():
     """Inti perbaikannya: nomor yang dulu gagal grounding kini ketemu dengan bukti kuat."""
     skor, jenis = calculate_match_confidence(
@@ -169,7 +169,7 @@ def test_identifier_match_diakui_sebagai_bukti_kuat():
     assert "identifier_match" in STRONG_MATCH_TYPES
 
 
-# --------------------------------------------------------------------- status UNSUPPORTED
+# status UNSUPPORTED
 def _ir_sederhana(potongan):
     """DocumentIR satu halaman dari daftar teks blok (lewat adapter, seperti jalur nyata)."""
     from app.document_ir.adapter import from_parsed_response
@@ -261,7 +261,7 @@ def test_unsupported_tetap_masuk_daftar_review_pm():
     assert "Nama Pekerjaan" in laporan["review_required_fields"]
 
 
-# --------------------------------------------------------------------- peran dua nomor kontrak
+# peran dua nomor kontrak
 from app.extractors.deterministic.identifiers import fix_contract_number_roles  # noqa: E402
 
 TELKOM, BUT = "PT TELEKOMUNIKASI INDONESIA Tbk", "PT BHAKTI UNGGUL TEKNOVASI"

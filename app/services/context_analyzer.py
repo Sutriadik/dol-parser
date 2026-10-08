@@ -117,7 +117,7 @@ class ContextAnalyzer:
         self._cache_key: int | None = None
         self._cache_value: ContextAnalysis | None = None
 
-    # ------------------------------------------------------------------ analysis
+    # analysis
     def analyze(self, markdown_text: str) -> ContextAnalysis:
         key = hash(markdown_text)
         if self._cache_key == key and self._cache_value is not None:
@@ -346,7 +346,7 @@ class ContextAnalyzer:
 
         return list(found.values())
 
-    # ------------------------------------------------------------------ parties
+    # parties
     @staticmethod
     def extract_parties_from_preamble(markdown_text: str) -> dict[str, dict[str, str]]:
         parties: dict[str, dict[str, str]] = {"pihak_pertama": {}, "pihak_kedua": {}}
@@ -381,11 +381,8 @@ class ContextAnalyzer:
         elif re.search(r"(?:1\.|\bI\.)\s*(?:PERUSAHAAN|PT\s+)", text, re.IGNORECASE) or re.search(
             r'selanjutnya disebut\s*["\']TELKOM', text, re.IGNORECASE
         ):
-            # Penanda butir "1."/"2." harus berdiri sendiri. Tanpa batas ini "1." di dalam NPWP
-            # semacam "01.234.567.8-901.000" dianggap awal blok pihak pertama (terjadi di kontrak
-            # eval setelah OCR tidak lagi membuang baris akta, 8 Okt 2026): nama perusahaan
-            # tercemar "... Tbk Nomor <akta> tanggal <tgl>", alamat terpotong, dan LLM
-            # menyalin hint itu ke hasil.
+            # Penanda butir "1."/"2." harus berdiri sendiri; tanpa batas ini "1." di dalam NPWP
+            # dianggap awal blok pihak pertama dan nama perusahaan tercemar teks akta.
             p1_m = re.search(
                 r"(?:antara pihak-pihak:?[\s\n]*)?(?:(?<![\w.])1\.|\bI\.)\s*([\s\S]*?)(?=(?:\n\s*[-–•*]?\s*(?:2\.|\bII\.)|\n\s*II\.|\n\s*2\.))",  # noqa: E501 (pola regex dibiarkan utuh)
                 text,
@@ -501,7 +498,7 @@ class ContextAnalyzer:
                 info["alamat"] = j_m.group(0).strip()
         return info
 
-    # ------------------------------------------------------------------ helpers
+    # helpers
     @staticmethod
     def normalize_indonesian_numbers(text: str) -> str:
         """'Rp 12.750.000,-' -> 'Rp 12750000' tanpa merusak NPWP / nomor rekening."""

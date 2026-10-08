@@ -32,7 +32,7 @@ SPH_VENDOR = [
 ]
 
 
-# --------------------------------------------------------------------- lapisan 1: urutan baca
+# lapisan 1: urutan baca
 def test_blok_total_terpecah_disusun_per_baris_dan_angkanya_utuh():
     merged = merge_adjacent_blocks(SPH_VENDOR)
     assert len(merged) == 1
@@ -72,7 +72,7 @@ def test_angka_tidak_bersentuhan_dipisah_spasi():
     assert lines[0] == "Total 2 5.000"
 
 
-# --------------------------------------------------------------------- lapisan 2: tanpa karangan
+# lapisan 2: tanpa karangan
 def test_guard_mengosongkan_bukan_menghitung_ulang():
     ext = SimpleNamespace(
         subtotal=519_600_000.0,
@@ -97,7 +97,7 @@ def test_guard_membiarkan_nilai_wajar():
     assert ext.grand_total == 533_218_400.0
 
 
-# --------------------------------------------------------------------- lapisan 3: validasi
+# lapisan 3: validasi
 def _ev(field, value, status):
     return SimpleNamespace(field=field, value=value, status=status)
 
@@ -140,7 +140,7 @@ def test_nilai_tertulis_di_dokumen_tapi_tidak_konsisten_ditandai_gagal():
     assert validate_sph(data).status == "fail"
 
 
-# --------------------------------------------------------------------- lapisan 4: nominal LLM
+# lapisan 4: nominal LLM
 def test_subtotal_llm_yang_tidak_tertulis_di_dokumen_dikosongkan():
     """
     SPH jasa: dokumen hanya menulis "Jumlah Setelah PPN" tanpa baris subtotal, tetapi LLM

@@ -28,7 +28,7 @@ from app.validation.rules import validate_contract, validate_sph
 ROOT = Path(__file__).resolve().parent.parent
 
 
-# ---------------------------------------------------------------- numbers & dates
+# numbers & dates
 @pytest.mark.parametrize(
     "raw,expected",
     [
@@ -68,7 +68,7 @@ def test_dates():
     assert len(find_dates("29 Mei 2026 – 29 Mei 2027")) == 2
 
 
-# ---------------------------------------------------------------- text cleaner
+# text cleaner
 def test_cleaner_does_not_break_numbers_or_brands():
     out = clean_ocr_text(
         "Harga Rp 166.500.000,00 volume 1,5 FortiGate McAfee PowerEdge InformasiUniversitas JI. "
@@ -81,7 +81,7 @@ def test_cleaner_does_not_break_numbers_or_brands():
     assert "Jl. Radio" in out
 
 
-# ---------------------------------------------------------------- context analyzer
+# context analyzer
 def test_entity_hints_ignore_address_numbers_and_bare_pt():
     md = (
         "Alamat : Jl. Contoh Raya No. 1, Bandung\n"
@@ -179,7 +179,7 @@ def test_labeled_party_blocks():
     assert parties["pihak_kedua"]["alamat"] == "Jl. Kenanga No. 7, Surakarta"
 
 
-# ---------------------------------------------------------------- table extractor
+# table extractor
 def test_table_columns_do_not_confuse_price_with_unit_or_qty():
     cols = detect_item_columns(
         ["No.", "Uraian Barang/Pekerjaan", "Vol", "Sat", "Harga Satuan (Rp)", "Jumlah Harga (Rp)"]
@@ -243,7 +243,7 @@ def test_desc_column_found_even_when_no_column_merged_into_it():
     assert items[0]["Jumlah Harga"] == 208200000.0
 
 
-# ---------------------------------------------------------------- classifier
+# classifier
 def test_classifier_sph_mentioning_spk_stays_sph():
     doc_type, conf = DocumentClassifier().classify_fast_rule(
         "SURAT PENAWARAN HARGA\nPerihal: sesuai SPK sebelumnya"
@@ -251,7 +251,7 @@ def test_classifier_sph_mentioning_spk_stays_sph():
     assert doc_type == "sph" and conf >= 0.95
 
 
-# ---------------------------------------------------------------- evidence
+# evidence
 def _ir(blocks):
     parsed = {
         "markdown": "\n".join(t for t, _ in blocks),
@@ -382,7 +382,7 @@ def test_evidence_status_reflects_validation_conflict():
     assert evidence["Pihak Pertama.Nama Perusahaan"].status == FieldStatus.UNSUPPORTED
 
 
-# ---------------------------------------------------------------- validation
+# validation
 def test_contract_validation_rules():
     ok = {
         "sub total": 150000000,
@@ -434,7 +434,7 @@ def test_sph_line_total_accepts_period_multiplier():
     assert validate_sph(data).status == "pass"
 
 
-# ---------------------------------------------------------------- docling bbox orientation
+# docling bbox orientation
 @pytest.mark.skipif(
     importlib.util.find_spec("docling") is None,
     reason="docling tidak terpasang (dilewati di CI ringan)",
@@ -451,7 +451,7 @@ def test_docling_bbox_converted_to_top_left_origin():
     assert box.ymin < 0.15 and box.ymax < 0.15
 
 
-# ---------------------------------------------------------------- LLM client (tanpa jaringan)
+# LLM client (tanpa jaringan)
 def test_llm_options_set_context_window_and_seed():
     from app.config import config
     from app.extractors.ollama_client import OllamaExtractor
@@ -474,12 +474,9 @@ def test_terbilang_recovered_from_document_text():
 
 
 def test_prompts_do_not_contain_evaluation_documents():
-    # Nilai pembanding dibaca dari golden set lokal, bukan ditulis di sini: daftar nilai
-    # asli di berkas tes sama saja membocorkannya ke repo publik. Hanya nilai yang memuat
-    # angka. Cakupannya: nomor dokumen, alamat, total, NPWP, dan deskripsi item -- tiga yang
-    # terakhir pernah bocor dari dokumen KL ke contoh prompt (diperbaiki 7 Okt 2026). Harga
-    # baris, durasi, dan persen denda sengaja tidak diperiksa: angka bulat seperti
-    # "450.000" atau "30 hari kalender" wajar muncul di contoh format.
+    # Nilai pembanding dibaca dari golden set lokal supaya nilai asli tidak tertulis di repo
+    # publik. Hanya nilai yang memuat angka (nomor dokumen, alamat, total, NPWP, deskripsi item);
+    # angka bulat seperti "450.000" wajar muncul di contoh format, jadi tidak diperiksa.
     import json
 
     from app.extractors import prompts
@@ -500,7 +497,7 @@ def test_prompts_do_not_contain_evaluation_documents():
                 assert value not in body, f"{path.name}: {name} bocor ke prompt"
 
 
-# ---------------------------------------------------------------- profiler & eval
+# profiler & eval
 def test_profiler_detects_native_pdf(tmp_path):
     import pymupdf
 
@@ -611,7 +608,7 @@ def test_llm_output_is_capped():
     assert OllamaExtractor()._options()["num_predict"] > 0
 
 
-# ---------------------------------------------------------------- generalization: doc types beyond
+# generalization: doc types beyond
 # samples
 def test_classifier_detects_pks_and_nota_pesanan():
     pks_doc = (
@@ -788,12 +785,9 @@ def test_docling_converter_allows_non_pdf_formats_by_default():
     assert InputFormat.IMAGE in converter.allowed_formats
 
 
-# ---------------------------------------------------------------- BAST (Berita Acara Serah Terima)
-# Ditambahkan setelah eksplorasi "Data Project BUT": 18 proyek nyata, masing-masing punya
-# Kontrak/SPK/PKS/Nota-Pesanan + SPH + BAST. BAST ternyata dokumen terpisah dengan struktur
-# sendiri (bukan varian kontrak): tabel TANPA kolom harga, kadang memuat bagian tambahan
-# "Berita Acara Uji Terima". Teks contoh di bawah diparafrasakan dari pola yang berulang di
-# seluruh 18 proyek tsb, bukan salinan persis satu klien.
+# BAST (Berita Acara Serah Terima): dokumen terpisah dengan struktur sendiri, tabel tanpa
+# kolom harga, kadang dengan bagian Berita Acara Uji Terima. Teks contoh di bawah adalah
+# parafrasa pola yang berulang, bukan salinan dokumen klien.
 
 BAST_SAMPLE_MD = """BERITA ACARA SERAH TERIMA (BAST)
 

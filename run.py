@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-# ---------------------------------------------------------------- SETUP
+# SETUP
 # WAJIB dijalankan sebelum `app.*` di-import: AppConfig membaca environment
 # satu kali saat modul di-import.
 SETUP = {
@@ -34,7 +34,7 @@ SETUP = {
 }
 for _key, _value in SETUP.items():
     os.environ.setdefault(_key, _value)
-# ------------------------------------------------------------ END SETUP
+# END SETUP
 
 from app.services.engine import OpenADEEngine  # noqa: E402
 

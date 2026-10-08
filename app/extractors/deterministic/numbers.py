@@ -105,9 +105,7 @@ def amounts_equal(a: float | None, b: float | None, tolerance: float = 1.0) -> b
     return abs(a - b) <= tolerance
 
 
-# ============================================================================
 # Terbilang (angka dalam kata) — dipakai validator untuk cek konsistensi total
-# ============================================================================
 
 _UNIT_WORDS = {
     "nol": 0,

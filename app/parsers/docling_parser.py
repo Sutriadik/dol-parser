@@ -60,12 +60,9 @@ _DOCLING_LABEL_MAP: dict[str, str] = {
 }
 
 
-# Dokumen SPK/PKS sumber sering memisahkan kolom label dan nilai jadi dua item OCR
-# terpisah ("Nama" lalu ": Budi Santoso Wijaya" sebagai item lain) -- kata label
-# polos ini TANPA titik dua, jadi heuristik ":" di bawah tidak menangkapnya, dan ia
-# ikut ke keluarga "paragraph" sehingga bisa tergabung dengan kalimat narasi di
-# dekatnya. Dikenali eksplisit sebagai "key_value" supaya tetap satu keluarga dengan
-# nilainya, dan TIDAK menyatu dengan paragraf naratif yang tidak berkaitan.
+# Kata label polos tanpa titik dua ("Nama" lalu ": Budi" sebagai item OCR terpisah) tidak
+# tertangkap heuristik ":" dan bisa menyatu dengan paragraf narasi. Dikenali eksplisit sebagai
+# key_value supaya tetap satu keluarga dengan nilainya.
 def _classify_label(label: str, text_val: str) -> str:
     """Label asli Docling jadi acuan utama.
 
@@ -107,31 +104,14 @@ _OCR_ENGINES = {
         {"lang": _TESSERACT_LANG},
         "Tesseract via tesserocr (butuh kompilasi)",
     ),
-    # BUG yang ditemukan lewat benchmark (bukan tebakan): RapidOcrOptions default ke
-    # lang=["chinese"], yang di Docling ternyata resolve ke PP-OCRv6 -- model gabungan
-    # CJK+Latin yang sama persis dipakai untuk lang=["en"] (diverifikasi: keduanya
-    # menghasilkan output BYTE-IDENTICAL). Model itu buruk untuk teks Latin murni --
-    # pada dokumen scan kontrak, satu pasal terbaca "e ean eaan ean an ea" alih-alih
-    # "BUT menjamin bahwa...". lang=["latin"] memuat model PP-OCRv5 khusus skrip Latin
-    # dan menurunkan rasio kata rusak dari 18,3% ke 4,7% pada satu kontrak layanan penuh
-    # (setara Apple Vision 3,9%) -- kalimat "berjalan dengan baik...tanggal 02 Januari 2025"
-    # yang tadinya hilang total kini terbaca utuh. Angka 12,9->8,0 dari sampel 3 halaman awal
-    # tidak dipakai lagi, dokumen penuh menunjukkan perbaikan jauh lebih besar.
+    # RapidOCR dipaksa lang=["latin"]: default-nya ("chinese", sama dengan "en") memuat model
+    # gabungan CJK+Latin yang buruk untuk teks Latin. Pada satu kontrak layanan penuh, rasio kata
+    # rusak turun dari 18,3% ke 4,7% (Apple Vision 3,9%). Diukur pada 2 dokumen; RapidOCR hanya
+    # punya model Latin ukuran mobile, jadi ini plafonnya.
     #
-    # Catatan jujur: hasil di atas dari 2 dokumen, dan RapidOCR hanya menerbitkan
-    # model Latin ukuran "mobile" -- tidak ada varian "server" yang lebih besar untuk
-    # dicoba (diverifikasi: model_type=SERVER ditolak, "Invalid OCR configuration", dan
-    # satu-satunya file .onnx latin yang ada bernama "_mobile"). Itu plafon kualitas
-    # RapidOCR untuk skrip Latin saat ini -- kebetulan sudah dekat Apple Vision pada
-    # sampel ini, tapi jangan dianggap terjamin sama pada dokumen lain.
-    #
-    # use_cls=False: pengklasifikasi arah baris membalik 180 derajat sebagian baris yang
-    # sebenarnya tegak, recognizer membacanya jadi sampah ("en n  eee en   e", skor ~0,3),
-    # lalu baris itu dibuang ambang text_score 0,5 tanpa jejak. Pada kontrak scan 14
-    # halaman: 66 baris hilang (kata terbaca 4.062), tanpa cls 3 baris noise (4.804 kata).
-    # Pola sampah "e ean eaan" di atas kemungkinan sebagian juga berasal dari sini.
-    # Harga yang dibayar: halaman yang di-scan TERBALIK tidak lagi tertolong per baris --
-    # kemiringan kecil tetap diluruskan image_enhancer, tapi putaran 180 derajat tidak.
+    # use_cls=False: pengklasifikasi arah membalik sebagian baris yang tegak lalu membuangnya
+    # (kontrak scan 14 halaman: 66 baris hilang vs 3 baris noise tanpa cls). Harganya: halaman
+    # yang di-scan terbalik 180 derajat tidak lagi tertolong.
     "rapidocr": (
         "RapidOcrOptions",
         {"lang": ["latin"], "use_cls": False},

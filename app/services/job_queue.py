@@ -114,7 +114,7 @@ class JobQueue:
         self._lock = threading.Lock()
         self._worker: threading.Thread | None = None
 
-    # ------------------------------------------------------------------ siklus hidup
+    # siklus hidup
     def start(self) -> None:
         if self._worker and self._worker.is_alive():
             return
@@ -162,7 +162,7 @@ class JobQueue:
             waiting = [i for i in self._order if i in self._jobs and self._jobs[i].status == QUEUED]
         return waiting.index(job_id) if job_id in waiting else None
 
-    # ------------------------------------------------------------------ internal
+    # internal
     def _evict_locked(self) -> None:
         """Buang job lama yang sudah selesai; job antre/berjalan tidak pernah dibuang."""
         while len(self._order) > self._max_history:

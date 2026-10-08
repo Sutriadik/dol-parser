@@ -201,7 +201,7 @@ def test_full_pipeline_on_realistic_page_fragment():
     assert types == ["title", "paragraph", "section_header", "attestation", "table"]
 
 
-# ---------------------------------------------------------------- reading_order_sort
+# reading_order_sort
 def test_two_column_signature_blocks_reordered_column_major():
     """
     Regresi urutan tampil: blok kanan (PIHAK KEDUA) yang union-bbox-nya memanjang ke

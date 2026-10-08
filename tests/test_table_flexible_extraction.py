@@ -203,7 +203,7 @@ def test_schema_item_number_defaults_and_preservation():
     assert sph_item1.nomor is None
 
 
-# --------------------------------------------------------------------- OTC / MRC
+# OTC / MRC
 # Bentuk tabel meniru kontrak layanan Telkom di korpus; nilai dan uraian rekaan.
 TABEL_JUDUL_BERTINGKAT = """
 | | | | | Masa | Harga Kesepakatan | Harga Kesepakatan | Harga Kesepakatan | Harga Kesepakatan |

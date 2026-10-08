@@ -286,7 +286,7 @@ def test_eval_tidak_menghitung_field_yang_sengaja_dihapus():
     assert [r["field"] for r in hasil["rows"]] == ["Nomor Kontrak Kerja"]
 
 
-# --------------------------------------------------------------------- nasib setiap field
+# nasib setiap field
 # Daftar ini adalah keputusan tertulis: setiap field yang diminta ke LLM berakhir di mana.
 #   "kolom"           -> kolom tabel domain (contract, ...); umumnya juga di Hasil Ekstraksi
 #   "hasil_ekstraksi" -> hanya baris di Hasil Ekstraksi (dilihat PM), tanpa kolom untuk n8n
@@ -470,7 +470,7 @@ def test_setiap_field_kontrak_punya_nasib_tercatat():
     _bandingkan_nasib(sebenarnya, NASIB_KONTRAK)
 
 
-# --------------------------------------------------------------------- termin & OTC/MRC
+# termin & OTC/MRC
 def _dengan_ketentuan(*baris):
     raw = _sample_contract_extraction()
     raw["data"]["Ketentuan Pembayaran"] = list(baris)

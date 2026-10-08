@@ -23,9 +23,7 @@ import re
 
 from app.parsers.table_converter import reformat_markdown_tables_in_text
 
-# ============================================================================
 # 1. Common OCR Typo Dictionary
-# ============================================================================
 
 OCR_TYPO_MAP: dict[str, str] = {
     # Angka ↔ Huruf confusion
@@ -90,9 +88,7 @@ def fix_common_ocr_typos(text: str) -> str:
     return _KAPITAL_SALAH_BACA.sub(lambda m: m.group(1) + m.group(2).upper(), text)
 
 
-# ============================================================================
 # 2. Fix Missing Spaces & Concatenations
-# ============================================================================
 
 
 def fix_missing_spaces(text: str) -> str:
@@ -160,9 +156,7 @@ def fix_missing_spaces(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 3. Fix Entity & Legal Spacing (Uppercase Compounds)
-# ============================================================================
 
 UPPERCASE_GLUED_PAIRS = [
     (r"\bTELEKOMUNIKASIINDONESIA\b", "TELEKOMUNIKASI INDONESIA"),
@@ -195,9 +189,7 @@ def fix_entity_and_legal_spacing(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 4. Normalize Entity Casing
-# ============================================================================
 
 UPPERCASE_ENTITIES = [
     r"universitas\s+telkom",
@@ -217,9 +209,7 @@ def normalize_entity_casing(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 5. Clean Signature Noise & Artifacts
-# ============================================================================
 
 
 def clean_signature_noise(text: str) -> str:
@@ -272,9 +262,7 @@ def clean_signature_noise(text: str) -> str:
     return "\n".join(cleaned_lines)
 
 
-# ============================================================================
 # 6. Clean Footer Noise
-# ============================================================================
 
 FOOTER_NOISE_PATTERNS = [
     # Alamat kampus panjang yang bukan konten utama
@@ -293,9 +281,7 @@ def clean_footer_noise(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 7. Fix Number Formatting
-# ============================================================================
 
 
 def fix_number_formatting(text: str) -> str:
@@ -307,9 +293,7 @@ def fix_number_formatting(text: str) -> str:
     return text
 
 
-# ============================================================================
 # 8. Normalize Whitespace
-# ============================================================================
 
 
 _INDENT_LIST = re.compile(r"^( +)(?:[-*] |\d{1,3}[.)] )")
@@ -347,9 +331,7 @@ def strip_invisible_and_control_chars(text: str) -> str:
     return text
 
 
-# ============================================================================
 # Master Cleaning Function
-# ============================================================================
 
 
 def clean_ocr_text(text: str) -> str:

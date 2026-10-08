@@ -88,7 +88,7 @@ def _payload(**ubah):
     return map_contract(raw)
 
 
-# ---------------------------------------------------------------- bentuk kiriman
+# bentuk kiriman
 def test_kiriman_memakai_judul_indonesia_dan_fk_nyata():
     db, transport = _nocodb_palsu()
     hasil = _pusher(transport).push(_payload())
@@ -114,7 +114,7 @@ def test_rencana_dry_run_tanpa_token():
     assert "hapus baris basi" in rencana["strategi"]["contract_item"]
 
 
-# ---------------------------------------------------------------- proses ulang
+# proses ulang
 def test_proses_ulang_tidak_menggandakan_baris():
     db, transport = _nocodb_palsu()
     _pusher(transport).push(_payload())
@@ -145,7 +145,7 @@ def test_daftar_anak_kosong_tetap_membersihkan_baris_lama():
     assert db.get("contract_requirement") == []
 
 
-# ---------------------------------------------------------------- keputusan PM
+# keputusan PM
 def test_dokumen_yang_sudah_direview_pm_tidak_ditimpa():
     db, transport = _nocodb_palsu()
     _pusher(transport).push(_payload())

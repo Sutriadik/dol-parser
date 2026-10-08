@@ -161,7 +161,7 @@ def empty_result(schema_class: type) -> BaseModel:
     return schema_class.model_validate(empty(schema_class))
 
 
-# ------------------------------------------------------------------ targeted clause
+# targeted clause
 def only_null_keys(templates: dict[str, Any], null_fields: list[str]) -> dict[str, Any]:
     """
     Buang kunci template yang sudah terisi, tapi HANYA di level teratas.

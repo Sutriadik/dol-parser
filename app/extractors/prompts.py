@@ -233,9 +233,7 @@ Output:
 Sekarang ekstrak dokumen berikut dengan akurasi dan kelengkapan 100%."""
 
 
-# ===========================================================================
 # Retry Prompt — digunakan saat extraction pertama menghasilkan banyak null
-# ===========================================================================
 
 CONTRACT_RETRY_PROMPT_TEMPLATE = """Ekstraksi sebelumnya menghasilkan field-field berikut yang masih KOSONG/NULL atau tidak lengkap:
 {null_fields}
@@ -274,9 +272,7 @@ bersarang, susun bersarang juga, contoh: {{"Vendor": {{"NPWP": "..."}}}}.
 Jika sebuah field memang tidak ada di dokumen, isi null."""
 
 
-# ===========================================================================
 # BAST (Berita Acara Serah Terima)
-# ===========================================================================
 
 BAST_EXTRACTION_SYSTEM_PROMPT = """Anda adalah AI Document Extraction Engine untuk dokumen Berita Acara Serah Terima (BAST) Indonesia.
 Dokumen ini mencatat serah terima barang/pekerjaan dari penyedia (vendor) kepada pemberi kerja (klien), dan seringkali dalam satu file yang sama juga memuat bagian "Berita Acara Uji Terima" (verifikasi teknis hasil pekerjaan) setelah bagian BAST utama.

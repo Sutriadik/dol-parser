@@ -93,7 +93,7 @@ class OpenADEEngine:
             self._refiner = MarkdownRefiner()
         return self._refiner
 
-    # ------------------------------------------------------------------ stage 1: parse
+    # stage 1: parse
     def profile(self, pdf_path: str, max_pages: int = None) -> DocumentProfile | None:
         try:
             return profile_document(pdf_path, max_pages=max_pages)
@@ -193,7 +193,7 @@ class OpenADEEngine:
                 f"Coba parser 'auto' atau 'docling', dan cek kualitas scan."
             )
 
-    # ------------------------------------------------------------------ stage 2: extract
+    # stage 2: extract
     def extract(
         self, markdown_text: str, doc_type: str = "auto"
     ) -> tuple[ContractExtractionSchema | SPHExtractionSchema | BASTExtractionSchema, str]:
@@ -226,7 +226,7 @@ class OpenADEEngine:
         )
         return extracted, resolved
 
-    # ------------------------------------------------------------------ reporting
+    # reporting
     @staticmethod
     def build_quality_report(
         evidence: list[FieldEvidence], validation: ValidationReport
@@ -298,7 +298,7 @@ class OpenADEEngine:
             ).model_dump()
         return result
 
-    # ------------------------------------------------------------------ end-to-end
+    # end-to-end
     def process_full(
         self,
         pdf_path: str,
@@ -331,12 +331,8 @@ class OpenADEEngine:
         parse_md_file = parsing_dir / f"{path.stem}.parse.md"
         parse_json_file = parsing_dir / f"{path.stem}.parse.json"
         parse_md_file.write_text(parsed.markdown, encoding="utf-8")
-        # indent=2 supaya struktur (halaman/blok bertingkat) enak dibuka langsung di editor --
-        # sebelumnya satu baris raksasa, tidak elok dibuka manual. "markdown" dikeluarkan dari
-        # file JSON ini: isinya sama persis dengan *.parse.md di sebelahnya (yang memang teks
-        # biasa, bukan string ber-escape \n), jadi dobel di sini cuma menambah ukuran file dan
-        # bikin satu field muncul sebagai satu baris sangat panjang tanpa cara dihindari (aturan
-        # format JSON: newline di dalam string wajib di-escape jadi \n literal).
+        # indent=2 supaya enak dibaca di editor. "markdown" dikeluarkan karena isinya sama dengan
+        # *.parse.md di sebelahnya.
         parse_json_data = parsed.model_dump(exclude_none=True, exclude={"markdown"})
         parse_json_file.write_text(
             json.dumps(parse_json_data, indent=2, ensure_ascii=False), encoding="utf-8"

@@ -98,7 +98,7 @@ class OllamaExtractor:
         self._doc_text: str = ""
         self._system_prompt: str = ""
 
-    # ------------------------------------------------------------------ LLM plumbing
+    # LLM plumbing
     def reset_stats(self) -> None:
         self.llm_calls = 0
         self.llm_seconds = 0.0
@@ -156,8 +156,7 @@ class OllamaExtractor:
         )
         return response["message"]["content"]
 
-    # --- prefix caching -------------------------------------------------
-    # Ollama me-reuse KV-cache selama prefix token sebuah prompt identik dengan panggilan
+    # Prefix caching. Ollama me-reuse KV-cache selama prefix prompt identik dengan panggilan
     # sebelumnya. Pada mesin M4 ini, dokumen 6.400 token butuh ~41 detik untuk di-prefill;
     # kalau prefix-nya sama persis, panggilan berikutnya hanya ~0,3 detik.
     #
@@ -216,7 +215,7 @@ class OllamaExtractor:
             logger.debug(f"Targeted LLM call gagal: {e}")
             return {}
 
-    # ------------------------------------------------------------------ null tracking
+    # null tracking
     def _count_null_fields(
         self, data: dict[str, Any], prefix: str = ""
     ) -> tuple[int, int, list[str]]:
@@ -447,7 +446,7 @@ class OllamaExtractor:
         ]
         return self._run_targeted_groups(system_prompt, doc_text, null_fields, groups)
 
-    # ------------------------------------------------------------------ context budget
+    # context budget
     def _prepare_effective_text(self, enriched_text: str, max_chars: int = None) -> str:
         """Dokumen panjang: pertahankan preamble, pasal kunci, seluruh tabel, dan penutup."""
         max_chars = max_chars or config.EFFECTIVE_TEXT_MAX_CHARS
@@ -507,7 +506,7 @@ class OllamaExtractor:
             )
         return effective
 
-    # ------------------------------------------------------------------ shared pipeline
+    # shared pipeline
     def _run_extraction(
         self,
         markdown_text: str,
@@ -593,7 +592,7 @@ class OllamaExtractor:
 
     _find_terbilang_in_text = staticmethod(find_terbilang_in_text)
 
-    # ------------------------------------------------------------------ item fallback
+    # item fallback
     def _fill_items_via_llm(
         self, item_model: type, alias: str, key_attrs: tuple[str, ...]
     ) -> list[BaseModel]:
@@ -738,17 +737,9 @@ class OllamaExtractor:
             },
         )
 
-        # Total PPN SENGAJA tidak dihitung dari (total - sub total). Dulu dihitung di sini, dan
-        # itu salah karena dua alasan:
-        #
-        #   1. Nilai hasil hitungan tidak ada di dokumen, jadi tidak punya pasal atau kutipan
-        #      untuk dikonfirmasi PM per field (briefing hlm. 11) -- ia masuk ke NocoDB terlihat
-        #      sama meyakinkannya dengan nilai yang benar-benar terbaca.
-        #   2. Ia membuat aturan validasi "sub total + Total PPN = Total Harga" selalu lolos:
-        #      aturan itu jadi memeriksa hasil hitungannya sendiri, bukan isi dokumen.
-        #
-        # Selisih total dan sub total tetap diperiksa -- tapi di app/validation/rules.py, sebagai
-        # temuan yang dilaporkan, bukan sebagai nilai yang diam-diam diisikan.
+        # Total PPN sengaja tidak dihitung dari (total - sub total): nilai hitungan tidak punya kutipan
+        # untuk dikonfirmasi PM, dan membuat aturan "sub total + PPN = total" selalu lolos.
+        # Selisihnya diperiksa di app/validation/rules.py sebagai temuan, bukan diisikan.
 
         for amount in (extracted.total_harga_pekerjaan, extracted.sub_total):
             if amount and terbilang_to_number(extracted.jumlah_terbilang or "") != int(

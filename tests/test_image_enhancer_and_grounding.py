@@ -17,9 +17,7 @@ from app.parsers.image_enhancer import (
     sharpen_and_denoise,
 )
 
-# ============================================================================
 # 1. Image Quality Enhancement Tests
-# ============================================================================
 
 
 def test_assess_image_quality():
@@ -85,9 +83,7 @@ def test_preprocess_image_for_ocr():
     assert processed.shape[2] == 3
 
 
-# ============================================================================
 # 2. Smooth Grounding Confidence Scoring Tests
-# ============================================================================
 
 
 def test_calculate_match_confidence_exact_match():

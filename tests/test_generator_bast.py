@@ -57,7 +57,7 @@ def _susun(v, **kw):
     return susun_draf_bast(*_kontrak_dari_db(), v, **kw)
 
 
-# ---------------------------------------------------------------- nilai terverifikasi
+# nilai terverifikasi
 def test_nilai_terverifikasi_sama_dengan_view_postgresql():
     ef = [
         {"field_path": "A", "ai_value_text": "1"},
@@ -79,7 +79,7 @@ def test_nilai_terverifikasi_sama_dengan_view_postgresql():
     assert hitung_nilai_terverifikasi(ef, rv) == {"A": "1", "B": "2,5"}
 
 
-# ---------------------------------------------------------------- menolak
+# menolak
 def test_tanpa_konfirmasi_pm_tidak_ada_draf():
     draf, masalah = _susun({})
     assert draf is None
@@ -101,7 +101,7 @@ def test_satu_item_belum_dikonfirmasi_menggagalkan_draf():
     assert draf is None and masalah == [f"belum dikonfirmasi PM: {_ITEM.format(i=2, f='volume')}"]
 
 
-# ---------------------------------------------------------------- menyusun
+# menyusun
 def test_draf_lengkap_dari_nilai_terkonfirmasi():
     draf, masalah = _susun(_semua_dikonfirmasi())
     assert masalah == []

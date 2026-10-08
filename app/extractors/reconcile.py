@@ -28,7 +28,7 @@ SUMMARY_ROW = re.compile(
 )
 
 
-# ------------------------------------------------------------------ deterministic
+# deterministic
 # reconciliation
 def reconcile_items(
     llm_items: list[BaseModel],
@@ -59,18 +59,11 @@ def reconcile_items(
         return sum(float(t.get(total_alias) or 0) for t in items)
 
     if table_groups and len(table_groups) > 1 and not matches_reference(jumlah(table_items)):
-        # Bundel kontrak (BA negosiasi + penawaran + nota pesanan) menulis tabel harga yang
-        # sama dua-tiga kali. Menggabungkan semua tabel menggandakan item: satu kontrak bundel
-        # dulu keluar 12 item (5 dari salinan pertama + 7 dari salinan ketiga, satu item
-        # hilang), padahal rinciannya 8 item yang jumlahnya sama dengan subtotal. Baris
-        # antar-salinan tidak identik ("Tiket Pesawat" vs "Tiket Pesawat (Kota A - Kota B)"), jadi
-        # yang dipilih SATU tabel utuh, bukan baris yang dibuang karena mirip. Tabel
-        # bersambung lintas halaman tidak terkena: gabungannya sendiri cocok dengan subtotal.
-        #
-        # reference_amounts adalah isian LLM (subtotal/total), dan LLM bisa mengarang angka
-        # yang kebetulan sama dengan jumlah salah satu salinan. Karena itu pemilihan hanya
-        # memakai rujukan yang tertulis di dokumen (angka atau terbilang); tanpa rujukan
-        # tertulis, semua tabel tetap dipakai seperti sebelumnya.
+        # Bundel kontrak (BA negosiasi + penawaran + nota pesanan) bisa memuat tabel harga yang sama
+        # beberapa kali; menggabungkan semuanya menggandakan item. Barisnya tidak selalu identik,
+        # jadi yang dipilih SATU tabel utuh yang jumlahnya sama dengan nominal tertulis di dokumen.
+        # Rujukan itu isian LLM, maka disaring dulu: tanpa rujukan tertulis, semua tabel tetap
+        # dipakai.
         tertulis = [
             r
             for r in reference_amounts
@@ -145,7 +138,7 @@ def find_terbilang_in_text(markdown_text: str, amount: float) -> str | None:
     return None
 
 
-# ------------------------------------------------------------------ public API
+# public API
 def prefer_confirmed_amount(extracted: BaseModel, attr: str, markdown_text: str) -> None:
     """
     Ganti nominal LLM dengan nominal yang dikonfirmasi terbilangnya -- HANYA bila nominal

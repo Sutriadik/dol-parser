@@ -18,16 +18,9 @@ REST_WEIGHT = 0.5  # bobot kata kunci di luar halaman awal (berkas gabungan)
 
 _RULES: dict[str, list[tuple[str, float]]] = {
     "contract": [
-        # Mencakup varian dokumen kontrak pengadaan Indonesia: SPK, Kontrak/PKS, dan
-        # Nota/Surat Pesanan (dokumen pemesanan ringkas dari pelanggan ke vendor).
-        #
-        # "KONTRAK" tanpa kualifikasi TIDAK dijadikan sinyal kuat: BAST/dokumen lain sering
-        # menyebutnya hanya sebagai rujukan ("Nomor PO / Kontrak", "sesuai dokumen PO/Kontrak")
-        # tanpa dokumen itu sendiri berupa kontrak. Begitu juga "PIHAK PERTAMA/KEDUA" -- BAST
-        # memakai istilah yang sama persis untuk pihak penyerah/penerima, jadi tidak
-        # membedakan kontrak vs BAST dan sengaja TIDAK dipakai sebagai sinyal di sini.
-        # SPMK (Surat Perintah Mulai Kerja) = perintah resmi mulai bekerja setelah kontrak
-        # ditandatangani -- dokumen keluarga SPK, dialurkan ke schema kontrak yang sama.
+        # Varian kontrak pengadaan: SPK, Kontrak/PKS, Nota/Surat Pesanan, dan SPMK (satu keluarga
+        # SPK). "KONTRAK" polos dan "PIHAK PERTAMA/KEDUA" sengaja bukan sinyal kuat: BAST memakai
+        # keduanya juga, sebagai rujukan dan sebutan penyerah/penerima.
         (r"\bSURAT\s+PERINTAH\s+(?:MULAI\s+)?KERJA\b", 3.0),
         (r"\bSPM?K\b", 2.0),
         (r"\bPERJANJIAN\s+KERJA\s*SAMA\b", 3.0),

@@ -38,9 +38,7 @@ from app.schemas.common import (
 
 MIN_TEXT_CHARS_PER_PAGE = 50
 
-# ============================================================================
 # OCR Box and Spatial Clustering (Fallback mode)
-# ============================================================================
 
 
 @dataclass
@@ -123,9 +121,7 @@ def cluster_and_merge_lines(
     return merged_lines
 
 
-# ============================================================================
 # PaddleOCR Parser Class
-# ============================================================================
 
 
 class PaddleOCRParser:
@@ -204,9 +200,7 @@ class PaddleOCRParser:
             return True
         return bool(re.match(r"^(https?://)?www\.[a-zA-Z0-9\.\-_]+\.[a-zA-Z]{2,4}/?$", t))
 
-    # ========================================================================
     # LAYOUT MODE — PP-Structure
-    # ========================================================================
 
     def _parse_with_layout(self, pdf_path: str, max_pages: int = None) -> LandingAIParsedResponse:
         """
@@ -359,9 +353,7 @@ class PaddleOCRParser:
             structure=DocumentStructure(children=pages_structure),
         )
 
-    # ========================================================================
     # FALLBACK MODE — PaddleOCR + Spatial Clustering
-    # ========================================================================
 
     def _parse_with_ocr(self, pdf_path: str, max_pages: int = None) -> LandingAIParsedResponse:
         """
@@ -510,9 +502,7 @@ class PaddleOCRParser:
             structure=DocumentStructure(children=pages_structure),
         )
 
-    # ========================================================================
     # Public API
-    # ========================================================================
 
     def parse(self, pdf_path: str, max_pages: int = None) -> LandingAIParsedResponse:
         """
