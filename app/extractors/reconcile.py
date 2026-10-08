@@ -38,11 +38,16 @@ def reconcile_items(
     total_attr: str,
     total_alias: str,
     reference_amounts: list[float],
+    table_groups: list[list[dict[str, Any]]] | None = None,
+    markdown_text: str | None = None,
 ) -> list[BaseModel]:
     """
     Pilih daftar item dari tabel (deterministik) atau LLM berdasarkan kecocokan jumlah dengan
     subtotal/total, bukan sekadar jumlah baris. Field opsional dari LLM (spesifikasi, merek)
     disalin ke item tabel jika jumlah baris sama.
+
+    `table_groups` = item yang sama dengan `table_items`, dikelompokkan per tabel asal.
+    `markdown_text` = teks dokumen; tanpa itu tidak ada salinan tabel yang dipilih.
     """
     if not table_items:
         return llm_items
@@ -50,7 +55,39 @@ def reconcile_items(
     def matches_reference(amount: float) -> bool:
         return any(ref and amounts_equal(amount, ref, 1000.0) for ref in reference_amounts)
 
-    table_ok = matches_reference(sum(float(t.get(total_alias) or 0) for t in table_items))
+    def jumlah(items: list[dict[str, Any]]) -> float:
+        return sum(float(t.get(total_alias) or 0) for t in items)
+
+    if table_groups and len(table_groups) > 1 and not matches_reference(jumlah(table_items)):
+        # Bundel kontrak (BA negosiasi + penawaran + nota pesanan) menulis tabel harga yang
+        # sama dua-tiga kali. Menggabungkan semua tabel menggandakan item: satu kontrak bundel
+        # dulu keluar 12 item (5 dari salinan pertama + 7 dari salinan ketiga, satu item
+        # hilang), padahal rinciannya 8 item yang jumlahnya sama dengan subtotal. Baris
+        # antar-salinan tidak identik ("Tiket Pesawat" vs "Tiket Pesawat (Kota A - Kota B)"), jadi
+        # yang dipilih SATU tabel utuh, bukan baris yang dibuang karena mirip. Tabel
+        # bersambung lintas halaman tidak terkena: gabungannya sendiri cocok dengan subtotal.
+        #
+        # reference_amounts adalah isian LLM (subtotal/total), dan LLM bisa mengarang angka
+        # yang kebetulan sama dengan jumlah salah satu salinan. Karena itu pemilihan hanya
+        # memakai rujukan yang tertulis di dokumen (angka atau terbilang); tanpa rujukan
+        # tertulis, semua tabel tetap dipakai seperti sebelumnya.
+        tertulis = [
+            r
+            for r in reference_amounts
+            if r and markdown_text and nominal_tertulis(r, markdown_text)
+        ]
+        salinan = [
+            g for g in table_groups if any(amounts_equal(jumlah(g), r, 1000.0) for r in tertulis)
+        ]
+        if salinan:
+            table_items = max(salinan, key=len)
+            logger.info(
+                f"📊 {len(table_groups)} tabel harga, gabungannya tidak cocok subtotal/total; "
+                f"memakai satu tabel ({len(table_items)} item) yang jumlahnya sama dengan "
+                "nominal tertulis di dokumen"
+            )
+
+    table_ok = matches_reference(jumlah(table_items))
     llm_ok = matches_reference(sum(float(getattr(i, total_attr) or 0) for i in llm_items))
     llm_has_summary = any(SUMMARY_ROW.match(getattr(i, desc_attr).strip()) for i in llm_items)
 
@@ -154,6 +191,34 @@ def reconcile_bast_items(
         return llm_items
     logger.info(f"📊 Item BAST dari tabel dipakai ({len(llm_items)} LLM → {len(validated)} tabel)")
     return validated
+
+
+def nominal_tertulis(nilai: float, markdown_text: str) -> bool:
+    """Nominal itu tertulis di dokumen, sebagai angka atau sebagai terbilang."""
+    if any(amounts_equal(nilai, n, 1.0) for n in numbers_in_text(markdown_text)):
+        return True
+    return find_terbilang_in_text(markdown_text, nilai) is not None
+
+
+def drop_unwritten_sph_totals(ext: "SPHExtractionSchema", markdown_text: str) -> None:
+    """
+    Kosongkan Subtotal / Nilai PPN / Grand Total dari LLM yang tidak tertulis di dokumen,
+    baik sebagai angka maupun terbilang. JANGAN menggantinya dengan hasil hitungan.
+
+    Kasus nyata pada SPH jasa: tabel hanya menulis "Jumlah Setelah PPN", tanpa baris
+    subtotal, tapi LLM mengisi Subtotal dengan angka yang tidak ada di mana pun di
+    dokumen. Grounding memang menandainya UNSUPPORTED, tetapi nilainya tetap terkirim ke PM
+    sebagai isian awal. Nilai kosong lebih jujur: PM melihatnya sebagai field hilang.
+    """
+    for attr in ("subtotal", "ppn_nominal", "grand_total"):
+        nilai = getattr(ext, attr)
+        if nilai is None or nominal_tertulis(nilai, markdown_text):
+            continue
+        logger.warning(
+            f"⚠️  {attr}: nilai LLM {nilai:,.0f} tidak tertulis di dokumen -> dikosongkan "
+            "untuk diisi PM, tidak dihitung ulang."
+        )
+        setattr(ext, attr, None)
 
 
 def sanitize_sph_totals(ext: "SPHExtractionSchema") -> None:

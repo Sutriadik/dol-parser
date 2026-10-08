@@ -101,7 +101,7 @@ class ItemBarangPekerjaan(BaseModel):
         alias="Spesifikasi",
         description="Spesifikasi teknis, part number, atau cakupan layanan",
     )
-    volume: float = Field(..., alias="volume", description="Jumlah kuantitas/volume barang")
+    volume: float | None = Field(..., alias="volume", description="Jumlah kuantitas/volume barang")
     unit: str = Field(
         ...,
         alias="unit",
@@ -112,10 +112,10 @@ class ItemBarangPekerjaan(BaseModel):
         alias="Periode/Durasi",
         description="Periode waktu atau durasi bulanan/harian jika ada (misal: 12 bulan)",
     )
-    harga_satuan: float = Field(
+    harga_satuan: float | None = Field(
         ..., alias="Harga Satuan", description="Harga satuan per unit dalam Rupiah (MRC/OTC)"
     )
-    jumlah_harga: float = Field(
+    jumlah_harga: float | None = Field(
         ..., alias="Jumlah Harga", description="Total harga item dalam Rupiah (MRC/OTC)"
     )
     # Diisi pembaca tabel dari judul kolom tempat angkanya berada, bukan oleh LLM: field item

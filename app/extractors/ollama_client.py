@@ -51,6 +51,7 @@ from app.extractors.prompts import (
 from app.extractors.reconcile import (  # noqa: F401
     SUMMARY_ROW,
     clean_and_number_items,
+    drop_unwritten_sph_totals,
     find_terbilang_in_text,
     prefer_confirmed_amount,
     reconcile_bast_items,
@@ -59,6 +60,7 @@ from app.extractors.reconcile import (  # noqa: F401
 )
 from app.logger import logger
 from app.parsers.table_extractor import (
+    extract_item_groups_from_markdown_tables,
     extract_items_from_markdown_tables,
     extract_tables_from_markdown,
 )
@@ -696,14 +698,17 @@ class OllamaExtractor:
             targeted_min_chars=3000,
         )
 
+        kelompok = extract_item_groups_from_markdown_tables(markdown_text, doc_type="contract")
         extracted.items = self._reconcile_items(
             extracted.items,
-            extract_items_from_markdown_tables(markdown_text, doc_type="contract"),
+            [i for g in kelompok for i in g],
             ItemBarangPekerjaan,
             "deskripsi",
             "jumlah_harga",
             "Jumlah Harga",
             [extracted.sub_total, extracted.total_harga_pekerjaan],
+            table_groups=kelompok,
+            markdown_text=markdown_text,
         )
         if not extracted.items:
             extracted.items = self._fill_items_via_llm(
@@ -825,14 +830,17 @@ class OllamaExtractor:
             self._extract_targeted_sph_clauses,
             targeted_min_chars=1000,
         )
+        kelompok = extract_item_groups_from_markdown_tables(markdown_text, doc_type="sph")
         extracted.items = self._reconcile_items(
             extracted.items,
-            extract_items_from_markdown_tables(markdown_text, doc_type="sph"),
+            [i for g in kelompok for i in g],
             SPHItemDetail,
             "nama_item",
             "total_harga",
             "Total Harga",
             [extracted.subtotal, extracted.grand_total],
+            table_groups=kelompok,
+            markdown_text=markdown_text,
         )
         if not extracted.items:
             extracted.items = self._fill_items_via_llm(
@@ -848,12 +856,15 @@ class OllamaExtractor:
         # angka tersambung). Nilai absurd DIKOSONGKAN, tidak dihitung ulang -- lihat
         # docstring _sanitize_sph_totals.
         self._sanitize_sph_totals(extracted)
+        self._drop_unwritten_sph_totals(extracted, markdown_text)
 
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None
         return extracted
 
     _sanitize_sph_totals = staticmethod(sanitize_sph_totals)
+
+    _drop_unwritten_sph_totals = staticmethod(drop_unwritten_sph_totals)
 
     def extract_bast(self, markdown_text: str) -> BASTExtractionSchema:
         """

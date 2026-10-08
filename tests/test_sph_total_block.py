@@ -137,3 +137,40 @@ def test_nilai_tertulis_di_dokumen_tapi_tidak_konsisten_ditandai_gagal():
         "Grand Total": 618_105_600,
     }
     assert validate_sph(data).status == "fail"
+
+
+# --------------------------------------------------------------------- lapisan 4: nominal LLM
+def test_subtotal_llm_yang_tidak_tertulis_di_dokumen_dikosongkan():
+    """
+    SPH jasa: dokumen hanya menulis "Jumlah Setelah PPN" tanpa baris subtotal, tetapi LLM
+    mengisi Subtotal dengan angka lain. Angka itu tidak ada di dokumen; tidak boleh
+    terkirim ke PM sebagai isian awal, dan tidak boleh diganti hasil hitungan.
+    """
+    md = (
+        "| Uraian | Jumlah (Rp) |\n|---|---|\n| Jasa Contoh | 14.250.000 |\n"
+        "| Jumlah Setelah PPN | 14.250.000 |\n"
+    )
+    ext = SimpleNamespace(subtotal=12_800_000.0, ppn_nominal=None, grand_total=14_250_000.0)
+    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    assert ext.subtotal is None
+    assert ext.grand_total == 14_250_000.0
+
+
+def test_nominal_yang_hanya_tertulis_sebagai_terbilang_dibiarkan():
+    md = "Total penawaran (Empat Belas Juta Dua Ratus Lima Puluh Ribu Rupiah)."
+    ext = SimpleNamespace(subtotal=None, ppn_nominal=None, grand_total=14_250_000.0)
+    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    assert ext.grand_total == 14_250_000.0
+
+
+def test_nominal_tertulis_berformat_lain_dibiarkan():
+    md = "Sub Total Rp 604,800,000\nPPN 11% Rp. 61.253.708,-\nTotal 618.105.600,00"
+    ext = SimpleNamespace(
+        subtotal=604_800_000.0, ppn_nominal=61_253_708.0, grand_total=618_105_600.0
+    )
+    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    assert (ext.subtotal, ext.ppn_nominal, ext.grand_total) == (
+        604_800_000.0,
+        61_253_708.0,
+        618_105_600.0,
+    )

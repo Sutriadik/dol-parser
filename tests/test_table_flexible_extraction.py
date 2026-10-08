@@ -278,3 +278,233 @@ def test_tabel_tanpa_otc_mrc_jenis_biaya_kosong():
 """
     for dt in ("contract", "sph"):
         assert extract_items_from_markdown_tables(md, doc_type=dt)[0]["Jenis Biaya"] is None
+
+
+# Bentuk tabel SPH jasa konsultansi: kolom "Vol" dibelah dua sub-sel (orang | bulan), kolom
+# satuan tanpa judul karena Docling menggabungkan "Sat" ke judul harga, dan kolom nominal
+# berjudul "Jumlah (Rp)". Nilai buatan, bukan data klien.
+TABEL_VOL_TERBELAH = """
+|  No  | Uraian              |  Vol |           | Harga Satuan Sat (Rp) | Jumlah (Rp) |
+|:----:|:--------------------|-----:|:----------|----------------------:|------------:|
+|  A   | Biaya Personel      | Biaya Personel | Biaya Personel | Biaya Personel | Biaya Personel |
+|  1   | Konsultan Contoh    |  1 2 | orang/bln |             4.000.000 |   8.000.000 |
+|  2   | Asisten Contoh      | 1. id:) | orang/bln |          3.000.000 |   6.000.000 |
+|  B   | Non Personel        | Non Personel | Non Personel | Non Personel | Non Personel |
+|  1   | Cetak Laporan Contoh |   1 | LS        |               250.000 |     250.000 |
+| Jumlah PPN | Jumlah PPN | Jumlah PPN | Jumlah PPN | Jumlah PPN | 14.250.000 |
+"""
+
+
+def test_sel_vol_terbelah_tidak_digabung_jadi_satu_angka():
+    """
+    SPH jasa: sel Vol "1 | 2" (1 orang x 2 bulan) terbaca "1 2", spasinya dibuang jadi 12,
+    lalu Total Harga dihitung 12 x harga satuan, 6x lipat dari Jumlah yang tertulis.
+    Volume yang tidak terbaca utuh harus kosong, teks aslinya tetap terlihat.
+    """
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    items = extract_items_from_markdown_tables(TABEL_VOL_TERBELAH, doc_type="sph")
+    konsultan = items[0]
+    assert konsultan["Nama Barang/Jasa"] == "Konsultan Contoh"
+    assert konsultan["Volume / Qty"] is None
+    assert konsultan["Atribut Tambahan"]["Vol"] == "1 2"
+    assert konsultan["Harga Satuan"] == 4_000_000
+    assert konsultan["Total Harga"] == 8_000_000
+
+
+def test_sisa_ocr_di_sel_vol_tidak_dibaca_sebagai_volume():
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    asisten = extract_items_from_markdown_tables(TABEL_VOL_TERBELAH, doc_type="sph")[1]
+    assert asisten["Volume / Qty"] is None
+    assert asisten["Atribut Tambahan"]["Vol"] == "1. id:)"
+    assert asisten["Total Harga"] == 6_000_000
+
+
+def test_kolom_jumlah_rp_dibaca_sebagai_total_dan_jumlahnya_sama_dengan_dokumen():
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    items = extract_items_from_markdown_tables(TABEL_VOL_TERBELAH, doc_type="sph")
+    assert [i["Total Harga"] for i in items] == [8_000_000, 6_000_000, 250_000]
+    assert sum(i["Total Harga"] for i in items) == 14_250_000  # baris "Jumlah PPN"
+    assert items[2]["Volume / Qty"] == 1
+    assert all("Jumlah (Rp)" not in (i["Atribut Tambahan"] or {}) for i in items)
+
+
+def test_total_yang_tidak_tertulis_tidak_dihitung_dari_volume_kali_harga():
+    """Aturan 3 AGENTS.md: harga yang tidak tertulis dikirim kosong, bukan vol x harga."""
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    md = """
+| No | Uraian | Volume | Satuan | Harga Satuan | Total Harga |
+|---|---|---|---|---|---|
+| 1 | Barang Contoh | 3 | unit | 100.000 | |
+| 2 | Jasa Contoh | 2 | paket | | 500.000 |
+"""
+    sph = extract_items_from_markdown_tables(md, doc_type="sph")
+    assert sph[0]["Harga Satuan"] == 100_000 and sph[0]["Total Harga"] is None
+    assert sph[1]["Harga Satuan"] is None and sph[1]["Total Harga"] == 500_000
+
+    kontrak = extract_items_from_markdown_tables(md, doc_type="contract")
+    assert kontrak[0]["Jumlah Harga"] is None
+    assert kontrak[1]["Harga Satuan"] is None
+    # Item berharga kosong tetap lolos skema, tidak memaksa jalur LLM.
+    SPHItemDetail.model_validate(sph[0])
+    ItemBarangPekerjaan.model_validate(kontrak[1])
+
+
+def test_sel_vol_berisi_satu_angka_tetap_terbaca():
+    from app.parsers.table_extractor import baca_volume
+
+    assert baca_volume("12") == 12
+    assert baca_volume("10 Unit") == 10
+    assert baca_volume("1.000") == 1000
+    assert baca_volume("1,5") == 1.5
+    assert baca_volume("2 (dua)") == 2
+    assert baca_volume("1 2") is None
+    assert baca_volume("12. d:") is None
+
+
+def test_kolom_jumlah_di_sebelah_qty_dibaca_sebagai_total_bukan_dihitung():
+    """
+    SPH barang: volume punya kolom "Qty" sendiri (kosong), nominal di kolom "Jumlah". Kontrak:
+    judul nominal salah OCR jadi "Jmlah Harga (Rp)". Dulu keduanya tidak dikenali dan total
+    "benar" hanya kebetulan: volume bawaan 1 x harga satuan.
+    """
+    from app.parsers.table_extractor import extract_items_from_markdown_tables
+
+    sph_barang = """
+| No | | Qty | Freq | Satuan | Harga Satuan | Jumlah |
+|---|---|---|---|---|---|---|
+| 1 | Mesin Contoh | | | Unit | 7,000,000 | 14,000,000 |
+"""
+    item = extract_items_from_markdown_tables(sph_barang, doc_type="sph")[0]
+    assert item["Total Harga"] == 14_000_000
+    assert item["Harga Satuan"] == 7_000_000
+
+    st108 = """
+| No. | Model | Vol | Sat | Harga Satuan (Rp) | Jmlah Harga (Rp) |
+|---|---|---|---|---|---|
+| 1 | Lisensi Contoh | 2 | Paket | 3.000.000 | 6.000.000 |
+"""
+    item = extract_items_from_markdown_tables(st108, doc_type="contract")[0]
+    assert item["Jumlah Harga"] == 6_000_000 and item["volume"] == 2
+
+
+def test_jumlah_sebagai_volume_tidak_dianggap_kolom_total():
+    from app.parsers.table_extractor import detect_item_columns
+
+    cols = detect_item_columns(["No", "Uraian", "Jumlah", "Satuan", "Harga Satuan"])
+    assert cols["qty"] == "Jumlah"
+    assert cols["total"] == []
+
+
+# Bundel kontrak buatan: BA negosiasi (terpotong di batas halaman), rincian lengkap, dan nota
+# pesanan (baris terakhir terpotong). Ketiganya salinan tabel harga yang sama; teks barisnya
+# tidak identik antar-salinan, seperti di dokumen aslinya.
+BUNDEL_TIGA_SALINAN = """
+## Berita Acara Negosiasi
+
+| No | Nama Pekerjaan | Qty. | Satuan | Kesepakatan. Harga Satuan | Kesepakatan. Harga Total |
+|---|---|---|---|---|---|
+| 1 | Pelatihan Contoh | 1 | Paket | 10.000.000 | 10.000.000 |
+| 2 | Tiket Contoh | 2 | Orang | 1.000.000 | 2.000.000 |
+| | Transportasi Contoh | 1 | Hari | | |
+
+## Rincian Pekerjaan
+
+| No | Spesifikasi Pekerjaan | Vol | Sat | Harga Sat (Rp) | Jml Harga (Rp) |
+|---|---|---|---|---|---|
+| 1 | Pelatihan Contoh | 1 | Paket | 10.000.000 | 10.000.000 |
+| 2 | Tiket Contoh (Kota A - Kota B) | 2 | Orang | 1.000.000 | 2.000.000 |
+| 3 | Transportasi Contoh | 1 | Hari | 500.000 | 500.000 |
+| 4 | Dokumentasi Contoh | 1 | Paket | 250.000 | 250.000 |
+| Jml Harga | Jml Harga | Jml Harga | Jml Harga | | 12.750.000 |
+
+## Nota Pesanan
+
+| No | Nama Pekerjaan | Qty. | Satuan | Kesepakatan. Harga Satuan | Kesepakatan. Harga Total |
+|---|---|---|---|---|---|
+| 1 | Pelatihan Contoh | 1 | Paket | 10.000.000 | 10.000.000 |
+| 2 | Tiket Contoh | 2 | Orang | 1.000.000 | 2.000.000 |
+| 3 | Transportasi Contoh | 1 | Hari | 500.000 | 500.000 |
+"""
+
+
+def _rekonsiliasi_kontrak(md, acuan):
+    from app.extractors.reconcile import reconcile_items
+    from app.parsers.table_extractor import extract_item_groups_from_markdown_tables
+
+    kelompok = extract_item_groups_from_markdown_tables(md, doc_type="contract")
+    return reconcile_items(
+        [],
+        [i for g in kelompok for i in g],
+        ItemBarangPekerjaan,
+        "deskripsi",
+        "jumlah_harga",
+        "Jumlah Harga",
+        acuan,
+        table_groups=kelompok,
+        markdown_text=md,
+    )
+
+
+def test_tabel_harga_yang_diulang_di_bundel_kontrak_tidak_menggandakan_item():
+    """
+    Kontrak bundel: BA negosiasi, rincian, dan nota pesanan memuat tabel harga yang sama.
+    Dulu semua tabel digabung (item ganda, dan item yang hanya ada di salinan lengkap bisa
+    hilang). Yang dipakai harus satu salinan utuh yang jumlahnya sama dengan subtotal.
+    """
+    items = _rekonsiliasi_kontrak(BUNDEL_TIGA_SALINAN, [12_750_000, 14_152_500])
+    assert [i.deskripsi for i in items] == [
+        "Pelatihan Contoh",
+        "Tiket Contoh (Kota A - Kota B)",
+        "Transportasi Contoh",
+        "Dokumentasi Contoh",
+    ]
+    assert sum(i.jumlah_harga for i in items) == 12_750_000
+
+
+def test_tabel_bersambung_lintas_halaman_tetap_digabung():
+    md = """
+| No | Uraian | Volume | Satuan | Harga Satuan | Jumlah Harga |
+|---|---|---|---|---|---|
+| 1 | Barang Contoh A | 1 | unit | 1.000.000 | 1.000.000 |
+| 2 | Barang Contoh B | 1 | unit | 2.000.000 | 2.000.000 |
+
+<!-- PAGE BREAK -->
+
+| No | Uraian | Volume | Satuan | Harga Satuan | Jumlah Harga |
+|---|---|---|---|---|---|
+| 3 | Barang Contoh C | 1 | unit | 3.000.000 | 3.000.000 |
+"""
+    items = _rekonsiliasi_kontrak(md, [6_000_000, None])
+    assert [i.deskripsi for i in items] == ["Barang Contoh A", "Barang Contoh B", "Barang Contoh C"]
+
+
+def test_tanpa_salinan_yang_cocok_subtotal_semua_tabel_tetap_dipakai():
+    """Tidak ada angka tertulis yang mengonfirmasi salinan mana pun: jangan memilih-milih."""
+    items = _rekonsiliasi_kontrak(BUNDEL_TIGA_SALINAN, [99_000_000, None])
+    assert len(items) == 2 + 4 + 3
+
+
+def test_angka_llm_yang_tidak_tertulis_tidak_memicu_pemilihan_salinan():
+    """
+    Rujukan pemilihan salinan adalah isian LLM. Bila subtotal itu tidak tertulis di dokumen,
+    kecocokannya dengan jumlah salah satu salinan bisa kebetulan (atau hasil LLM menjumlah
+    sendiri), jadi tidak boleh dipakai membuang tabel lain.
+    """
+    tanpa_baris_jumlah = "\n".join(
+        b for b in BUNDEL_TIGA_SALINAN.splitlines() if not b.startswith("| Jml Harga")
+    )
+    assert "12.750.000" not in tanpa_baris_jumlah
+    items = _rekonsiliasi_kontrak(tanpa_baris_jumlah, [12_750_000, None])
+    assert len(items) == 2 + 4 + 3
+
+
+def test_subtotal_yang_hanya_tertulis_sebagai_terbilang_tetap_jadi_rujukan():
+    md = "\n".join(b for b in BUNDEL_TIGA_SALINAN.splitlines() if not b.startswith("| Jml Harga"))
+    md += "\nTotal (Dua Belas Juta Tujuh Ratus Lima Puluh Ribu Rupiah).\n"
+    assert "12.750.000" not in md
+    items = _rekonsiliasi_kontrak(md, [12_750_000, None])
+    assert len(items) == 4

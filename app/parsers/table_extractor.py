@@ -7,7 +7,10 @@ dengan menjaga 100% redaksi/konten sel utuh tanpa pemotongan.
 import re
 from typing import Any
 
-from app.extractors.deterministic.numbers import parse_indonesian_number  # noqa: F401 (re-export)
+from app.extractors.deterministic.numbers import (  # noqa: F401 (re-export)
+    parse_id_number,
+    parse_indonesian_number,
+)
 
 
 def is_markdown_table_separator(line: str) -> bool:
@@ -258,6 +261,7 @@ UNIT_KEYWORDS = ["sat", "satuan", "unit", "uom"]
 PERIOD_KEYWORDS = ["periode", "perlode", "durasi", "bln", "bulan", "jangka waktu", "masa"]
 UNIT_PRICE_KEYWORDS = [
     "harga satuan",
+    "harga sat",  # singkatan di SPH/SPK berformat LKPP: "Harga Sat (Rp)" | "Jml Harga (Rp)"
     "satuan harga",
     "unit price",
     "rate",
@@ -276,6 +280,29 @@ TOTAL_KEYWORDS = [
 ]
 
 
+_ANGKA_DALAM_SEL = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def baca_volume(sel: Any) -> float | None:
+    """
+    Volume dari satu sel, atau None bila sel itu tidak memuat tepat satu angka yang bersih.
+
+    Kolom "Vol" kadang dibelah dua sub-sel (SPH jasa: "1" orang dan "2" bulan). Markdown
+    menyatukannya jadi "1 2", dan parse_indonesian_number membuang spasinya sehingga
+    terbaca 12. Mengalikannya (1 x 2) juga bukan pilihan: itu angka hasil hitungan yang
+    tidak tertulis. Sisa OCR seperti "12. id:)" sama berbahayanya -- 12 tampak sah padahal
+    hurufnya bukti selnya tidak terbaca utuh. Keduanya dikosongkan; teks aslinya disimpan
+    pemanggil di Atribut Tambahan supaya PM tetap melihatnya.
+    """
+    teks = str(sel or "").strip()
+    if not teks or re.search(r"[^\w\s.,/()\-]", teks):
+        return None
+    angka = _ANGKA_DALAM_SEL.findall(teks)
+    if len(angka) != 1:
+        return None
+    return parse_id_number(angka[0])
+
+
 def detect_item_columns(headers: list[str]) -> dict[str, Any]:
     # "no" TIDAK dimasukkan ke exclude: tidak ada satu pun DESC_KEYWORDS yang bisa salah
     # cocok dengan header murni "No."/"Nomor", jadi kata itu tidak pernah dibutuhkan untuk
@@ -288,25 +315,40 @@ def detect_item_columns(headers: list[str]) -> dict[str, Any]:
     desc_col = _find_col(headers, DESC_KEYWORDS, _PRICE_WORDS)
     if not desc_col:
         desc_col = headers[1] if len(headers) > 1 else headers[0]
+    qty_col = _find_col(headers, QTY_KEYWORDS, _PRICE_WORDS + ["group", "titik", "pembayaran"])
+    price = [
+        h
+        for h in headers
+        if _header_matches(h, UNIT_PRICE_KEYWORDS, ["total", "jumlah harga", "harga total"])
+    ]
+    total = [
+        h
+        for h in headers
+        if _header_matches(
+            h,
+            TOTAL_KEYWORDS,
+            ["harga satuan", "satuan harga", "unit price", "sub total", "subtotal"],
+        )
+    ]
+    if not total:
+        # "Jumlah" saja biasanya volume, tapi bila volume sudah punya kolom sendiri, kolom
+        # "Jumlah" paling kanan adalah nominal baris: "Jumlah (Rp)" (SPH jasa), "Jumlah"
+        # di sebelah "Qty" (SPH barang), "Jmlah Harga (Rp)" salah OCR (kontrak). Dulu kolom
+        # ini masuk Atribut Tambahan dan totalnya dihitung vol x harga satuan.
+        jumlah = [
+            h
+            for h in headers
+            if h not in (qty_col, desc_col) and h not in price
+            if _header_matches(h, ["jumlah", "jml", "jmlah"])
+        ]
+        total = jumlah[-1:]
     return {
         "desc": desc_col,
-        "qty": _find_col(headers, QTY_KEYWORDS, _PRICE_WORDS + ["group", "titik", "pembayaran"]),
+        "qty": qty_col,
         "unit": _find_col(headers, UNIT_KEYWORDS, _PRICE_WORDS),
         "period": _find_col(headers, PERIOD_KEYWORDS, _PRICE_WORDS),
-        "price": [
-            h
-            for h in headers
-            if _header_matches(h, UNIT_PRICE_KEYWORDS, ["total", "jumlah harga", "harga total"])
-        ],
-        "total": [
-            h
-            for h in headers
-            if _header_matches(
-                h,
-                TOTAL_KEYWORDS,
-                ["harga satuan", "satuan harga", "unit price", "sub total", "subtotal"],
-            )
-        ],
+        "price": price,
+        "total": total,
     }
 
 
@@ -370,8 +412,23 @@ def extract_items_from_markdown_tables(
     Menjamin tidak ada baris yang terpotong, terlewat, atau disingkat.
     Menjamin urutan nomor baris item tabel (1, 2, 3, dst.) selalu sinkron dan konsisten.
     """
+    return [
+        item
+        for kelompok in extract_item_groups_from_markdown_tables(markdown_text, doc_type)
+        for item in kelompok
+    ]
+
+
+def extract_item_groups_from_markdown_tables(
+    markdown_text: str, doc_type: str = "sph"
+) -> list[list[dict[str, Any]]]:
+    """
+    Sama dengan extract_items_from_markdown_tables, tetapi item dikelompokkan per tabel asal
+    (tabel tanpa item tidak ikut). Pengelompokan dibutuhkan reconcile_items untuk mengenali
+    bundel dokumen yang memuat tabel harga yang sama lebih dari sekali.
+    """
     tables = extract_tables_from_markdown(markdown_text)
-    extracted_items = []
+    kelompok_item: list[list[dict[str, Any]]] = []
 
     # BAST (Berita Acara Serah Terima) mendaftar barang/pekerjaan yang diserahkan TANPA kolom
     # harga -- tabel itu valid untuk BAST, tapi untuk kontrak/SPH tabel tanpa harga biasanya
@@ -384,6 +441,8 @@ def extract_items_from_markdown_tables(
 
     for table in tables:
         headers = table["headers"]
+        extracted_items: list[dict[str, Any]] = []
+        kelompok_item.append(extracted_items)
 
         cols = detect_item_columns(headers)
         desc_col, qty_col, unit_col, period_col = (
@@ -451,8 +510,8 @@ def extract_items_from_markdown_tables(
 
             kategori = current_kategori or r.get("_kategori_terdeteksi")
 
-            vol_str = r.get(qty_col, "1") if qty_col else "1"
-            vol = parse_indonesian_number(vol_str) or 1.0
+            vol_str = str(r.get(qty_col) or "").strip() if qty_col else ""
+            vol = baca_volume(vol_str) if vol_str else 1.0
 
             unit = r.get(unit_col, "Paket").strip() if unit_col and r.get(unit_col) else "Paket"
             periode = r.get(period_col, "").strip() if period_col and r.get(period_col) else None
@@ -471,10 +530,10 @@ def extract_items_from_markdown_tables(
                 if val > 0:
                     h_tot = val
 
-            if h_tot == 0.0 and h_sat > 0.0:
-                h_tot = vol * h_sat
-            elif h_sat == 0.0 and h_tot > 0.0 and vol > 0.0:
-                h_sat = round(h_tot / vol, 2)
+            # Harga yang tidak tertulis dibiarkan kosong, TIDAK dihitung dari volume x harga
+            # satuan (aturan 3 AGENTS.md). Dulu total yang tidak terbaca diisi vol x harga:
+            # satu SPH jasa menulis Jumlah per baris, tapi kolomnya tidak dikenali dan volume
+            # "1 2" terbaca 12, jadi Total Harga keluar 6x lipat dari yang tertulis.
 
             # Identifikasi extra attributes
             exclude_keys = set(price_cols + total_cols) | {
@@ -492,6 +551,8 @@ def extract_items_from_markdown_tables(
                 for k, v in r.items()
                 if k not in exclude_keys and not k.startswith("_") and v and v.strip()
             }
+            if vol is None:
+                extra[qty_col] = vol_str
 
             # Baris tanpa harga di tabel BoQ = judul kelompok atau header yang terulang (hasil OCR),
             # bukan item yang ditagih. Untuk BAST, tidak adanya harga itu normal -- jangan di-skip.
@@ -519,8 +580,8 @@ def extract_items_from_markdown_tables(
                     "volume": vol,
                     "unit": unit,
                     "Periode/Durasi": periode,
-                    "Harga Satuan": h_sat,
-                    "Jumlah Harga": h_tot,
+                    "Harga Satuan": h_sat or None,
+                    "Jumlah Harga": h_tot or None,
                     "Jenis Biaya": jenis_biaya_baris(r, price_cols + total_cols),
                     "Keterangan": None,
                     "Atribut Tambahan": extra if extra else None,
@@ -546,12 +607,12 @@ def extract_items_from_markdown_tables(
                     "Volume / Qty": vol,
                     "Satuan": unit,
                     "Periode/Durasi": periode,
-                    "Harga Satuan": h_sat,
-                    "Total Harga": h_tot,
+                    "Harga Satuan": h_sat or None,
+                    "Total Harga": h_tot or None,
                     "Jenis Biaya": jenis_biaya_baris(r, price_cols + total_cols),
                     "Keterangan": None,
                     "Atribut Tambahan": extra if extra else None,
                 }
             extracted_items.append(item_dict)
 
-    return extracted_items
+    return [kelompok for kelompok in kelompok_item if kelompok]
