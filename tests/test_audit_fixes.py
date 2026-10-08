@@ -108,6 +108,60 @@ def test_entity_hints_skip_lowercase_bank_and_notary_phrase():
     assert "Lokasi" not in hints
 
 
+def test_judul_kolom_tabel_nama_pekerjaan_bukan_hint_nama_pekerjaan():
+    md = (
+        "Perihal : Pengadaan Lisensi Contoh untuk Dinas Rekaan Tahun 2031\n\n"
+        "Rincian Pekerjaan\n\n"
+        "| No | Nama Pekerjaan | Pelanggan | Qty | Harga Total |\n"
+        "|:--:|:---|:---|:---|---:|\n"
+        "| 1 | Lisensi Contoh 100 akun | Dinas Rekaan | 1 | Rp 1.000.000 |\n"
+    )
+    hint = ContextAnalyzer().get_entity_hints(md).get("Nama Pekerjaan") or ""
+    assert "|" not in hint
+    assert "Pengadaan Lisensi Contoh" in hint
+
+
+def test_hint_perihal_berhenti_di_label_kop_berikutnya():
+    """Kop satu baris: "Perihal : X Lampiran : Y Kepada Yth : Z" -> hanya X."""
+    md = (
+        "No : ABC/P/1/2031 Perihal : Penawaran Server Rekaan Lampiran : Spesifikasi "
+        "Kepada Yth : PT. Contoh Makmur\n\nDengan surat ini kami menawarkan server rekaan.\n"
+    )
+    hints = ContextAnalyzer().get_entity_hints(md)
+    assert hints["Nama Pekerjaan"] == "Penawaran Server Rekaan"
+
+
+def test_hint_perihal_label_kop_bertumpuk_tidak_dijadikan_judul():
+    """
+    Regresi Nota Pesanan (7 Okt 2026): OCR menulis label "Perihal" dan "Lampiran" bertumpuk,
+    lalu isinya di baris berikut. Pola perihal dulu menelan semuanya jadi "Lampiran Nota
+    Pesanan ... 1 (satu) berkas Dengan hormat". Judul diambil dari rujukan "perihal ...
+    tanggal ..." di badan surat, berhenti sebelum tanggal.
+    """
+    md = (
+        "Perihal\n"
+        "Lampiran Nota Pesanan Pengadaan Lisensi Contoh untuk Dinas Rekaan Tahun 2031\n"
+        "1 (satu) berkas\n"
+        "Dengan hormat,\n\n"
+        "1. Surat Kesanggupan dari PT Contoh Makmur perihal Pengadaan Lisensi Contoh untuk "
+        "Dinas Rekaan Tahun 2031 tanggal 5 Maret 2031.\n"
+        "2. Perjanjian Kerjasama antara Dinas Rekaan dengan PT Contoh Makmur.\n"
+    )
+    hints = ContextAnalyzer().get_entity_hints(md)
+    assert hints["Nama Pekerjaan"] == "Pengadaan Lisensi Contoh untuk Dinas Rekaan Tahun 2031"
+
+
+def test_hint_tentang_judul_dua_baris_tetap_utuh():
+    md = (
+        "## PT CONTOH MAKMUR TENTANG\n\n"
+        "PENGADAAN LISENSI CONTOH UNTUK\nDINAS REKAAN TAHUN 2031\n\n"
+        "## Nomor: K.TEL.000/HK.810/2031\n\n"
+        "sepanjang tidak bertentangan dengan ketentuan.\n"
+    )
+    hints = ContextAnalyzer().get_entity_hints(md)
+    assert hints["Nama Pekerjaan"] == "PENGADAAN LISENSI CONTOH UNTUK DINAS REKAAN TAHUN 2031"
+
+
 def test_labeled_party_blocks():
     md = (
         "maka kami yang bertanda tangan dibawah ini :\nNama : Rina Kartika\nJabatan : Kepala "
@@ -467,6 +521,70 @@ def test_eval_compare_rules():
     assert compare("X", None)[0] == "missing"
 
 
+def _laporan(*baris_per_dok):
+    return {
+        "results": [
+            {"document": f"d{i}.pdf", "golden_terverifikasi": True, "rows": rows}
+            for i, rows in enumerate(baris_per_dok)
+        ]
+    }
+
+
+def _baris(field, verdict, false_acceptance=False, critical=False):
+    return {
+        "field": field,
+        "verdict": verdict,
+        "false_acceptance": false_acceptance,
+        "critical": critical,
+        "expected": "x",
+        "predicted": "y",
+    }
+
+
+def test_banding_eval_menandai_field_yang_turun_walau_rata_rata_naik():
+    """
+    Rata-rata bisa naik sambil satu field kritis rusak -- persis pola eval 2026-10-07
+    (lenient naik, kritis turun). Perbandingan harus per field, bukan per angka ringkasan.
+    """
+    from eval.run_eval import bandingkan_laporan
+
+    lama = _laporan(
+        [
+            _baris("Nomor", "exact", critical=True),
+            _baris("Lokasi", "wrong"),
+            _baris("Bank", "wrong"),
+        ]
+    )
+    baru = _laporan(
+        [
+            _baris("Nomor", "wrong", critical=True),
+            _baris("Lokasi", "exact"),
+            _baris("Bank", "exact"),
+        ]
+    )
+    beda = bandingkan_laporan(lama, baru)
+    assert [(b["document"], b["field"]) for b in beda["turun"]] == [("d0.pdf", "Nomor")]
+    assert beda["turun"][0]["critical"] is True
+    assert {b["field"] for b in beda["naik"]} == {"Lokasi", "Bank"}
+
+
+def test_banding_eval_menandai_nilai_salah_yang_baru_lolos_sebagai_bukti_kuat():
+    from eval.run_eval import bandingkan_laporan
+
+    lama = _laporan([_baris("Nilai", "wrong")])
+    baru = _laporan([_baris("Nilai", "wrong", false_acceptance=True)])
+    assert [b["field"] for b in bandingkan_laporan(lama, baru)["lolos_salah_baru"]] == ["Nilai"]
+
+
+def test_banding_eval_mengabaikan_dokumen_yang_tidak_ada_di_kedua_laporan():
+    from eval.run_eval import bandingkan_laporan
+
+    lama = _laporan([_baris("Nomor", "exact")])
+    baru = _laporan([_baris("Nomor", "exact")], [_baris("Nomor", "wrong")])
+    beda = bandingkan_laporan(lama, baru)
+    assert beda["turun"] == [] and beda["dokumen_tidak_terbanding"] == ["d1.pdf"]
+
+
 def test_engine_refuses_llm_extraction_on_image_only_parse():
     from app.schemas.common import DocumentStructure, LandingAIParsedResponse, ParseMetadata
     from app.services.engine import OpenADEEngine, ParsingError
@@ -517,6 +635,24 @@ def test_party_extraction_handles_pihak_kesatu_synonym():
     parties = ContextAnalyzer.extract_parties_from_preamble(md)
     assert parties["pihak_pertama"]["nama_perusahaan"] == "PT CONTOH SATU"
     assert parties["pihak_kedua"]["nama_perusahaan"] == "CV CONTOH DUA"
+
+
+def test_angka_satu_di_dalam_npwp_bukan_penanda_pihak_pertama():
+    md = (
+        "Pada hari ini bertempat di Semarang, antara pihak-pihak:\n\n"
+        "- PERUSAHAAN PERSEROAN (PERSERO) PT CONTOH NUSANTARA Tbk, NPWP: 01.234.567.8-901.000, "
+        "berkedudukan di Jalan Merpati Nomor 1 Semarang 50111, sebagaimana diubah dengan Akta "
+        "PT Contoh Nusantara Tbk Nomor 12 tanggal 3 Mei 2030, dalam perbuatan hukum ini "
+        'diwakili secara sah oleh RINA, Jabatan DIREKTUR, selanjutnya disebut "TELKOM"\n'
+        "- II. PT DATA CONTOH, NPWP: 0312.4567.8901.2000, beralamat di Jalan Kenanga No. 7 "
+        "Surakarta, dalam perbuatan hukum ini diwakili secara sah oleh BAYU, Jabatan DIREKTUR, "
+        'selanjutnya disebut "BUT".\n'
+        "Para Pihak terlebih dahulu menerangkan hal-hal sebagai berikut:\n"
+    )
+    pertama = ContextAnalyzer.extract_parties_from_preamble(md).get("pihak_pertama") or {}
+    # Lebih baik tanpa hint daripada hint "PT ... Tbk Nomor 12 tanggal 3 Mei 2030" yang
+    # disalin LLM ke hasil.
+    assert "tanggal" not in (pertama.get("nama_perusahaan") or "")
 
 
 def test_contract_schema_allows_minimal_nota_pesanan_without_hallucination_fields():

@@ -43,6 +43,15 @@ def disimpan(field_path: str) -> bool:
     return field_path.rsplit(".", 1)[-1] not in FIELD_TIDAK_DISIMPAN
 
 
+# "Jenis Biaya" dari pembaca tabel (app/parsers/table_extractor.jenis_biaya_baris) -> pilihan
+# nilai dol_schema. Nilai lain (mis. dari jalur cadangan LLM) dikirim kosong, bukan ditebak.
+_JENIS_BIAYA = {"OTC": "otc", "MRC": "mrc", "OTC dan MRC": "otc_dan_mrc"}
+
+
+def jenis_biaya(v: Any) -> str | None:
+    return _JENIS_BIAYA.get(txt(v) or "")
+
+
 _BULAN = {
     "januari": 1,
     "februari": 2,

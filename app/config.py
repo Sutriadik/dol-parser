@@ -78,6 +78,11 @@ class AppConfig(BaseModel):
     ENABLE_LAYOUT_ANALYSIS: bool = True  # Gunakan PPStructure untuk scanned docs (fallback engine)
 
     # --- Keamanan API (dipanggil n8n) ------------------------------------------------
+    # development | production. Di production, kelonggaran yang memudahkan pengembangan di
+    # laptop dimatikan: API key wajib (server menolak naik tanpanya), callback hanya ke host
+    # di CALLBACK_ALLOWED_HOSTS, dan galat 500 hanya membalas nomor rujukan -- pesan
+    # exception bisa memuat potongan isi kontrak atau path server.
+    ENV: str = os.getenv("OPENADE_ENV", "development").strip().lower()
     # Bila diisi, setiap endpoint /api/v1/* selain health wajib mengirim header
     # `X-API-Key`. Sengaja BUKAN default acak: server yang diam-diam menolak semua
     # permintaan lebih sulit didiagnosis daripada server yang terbuka lalu ditutup sadar.
@@ -92,6 +97,14 @@ class AppConfig(BaseModel):
     MAX_UPLOAD_MB: int = _env_int("MAX_UPLOAD_MB", 50)
     # Timeout saat service ini mem-POST hasil ke callback_url milik n8n.
     CALLBACK_TIMEOUT: float = float(os.getenv("CALLBACK_TIMEOUT", "30"))
+    # Host yang boleh menerima callback, dipisah koma (mis. "n8n.internal,localhost"). Tanpa
+    # daftar ini, pemegang API key bisa menyuruh server mem-POST hasil ekstraksi ke alamat
+    # mana saja, termasuk layanan internal (SSRF). Kosong = bebas di development, ditolak
+    # di production.
+    CALLBACK_ALLOWED_HOSTS: str = os.getenv("CALLBACK_ALLOWED_HOSTS", "")
+    # Bila diisi, setiap callback membawa header `X-OpenADE-Signature: sha256=<hmac>` atas
+    # body mentahnya, supaya n8n bisa menolak kiriman yang bukan dari service ini.
+    CALLBACK_SECRET: str = os.getenv("CALLBACK_SECRET", "")
 
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
@@ -107,6 +120,13 @@ class AppConfig(BaseModel):
     # Push langsung ke NocoDB dari FastAPI. Default mati: pada arsitektur briefing (hlm. 8)
     # n8n yang mengorkestrasi, FastAPI cukup mengembalikan payload-nya.
     NOCODB_PUSH_ENABLED: bool = _env_bool("NOCODB_PUSH_ENABLED", False)
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENV == "production"
+
+    def callback_hosts(self) -> set[str]:
+        return {h.strip().lower() for h in self.CALLBACK_ALLOWED_HOSTS.split(",") if h.strip()}
 
     def cors_origins(self) -> list:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
@@ -134,7 +154,7 @@ class AppConfig(BaseModel):
     # Versi skema DATABASE (repo dol-schema) yang dipahami kode ini. dol-schema dipasang dari
     # folder sejajar, jadi yang terpasang adalah apa pun yang sedang ada di folder itu --
     # app/companion menolak jalan bila versinya berbeda. Naikkan bersama perubahan pemeta.
-    DOL_SCHEMA_VERSION: str = "companion-2026.10.3"
+    DOL_SCHEMA_VERSION: str = "companion-2026.10.4"
 
 
 config = AppConfig()

@@ -23,6 +23,7 @@ from app.companion.common import (
     extracted_field_rows,
     extraction_run_row,
     iso,
+    jenis_biaya,
     num,
     parse_indonesian_date,
     txt,
@@ -80,6 +81,7 @@ def map_sph(
                 "period": txt(row.get("Periode/Durasi")),
                 "unit_price": num(row.get("Harga Satuan")),
                 "line_total": num(row.get("Total Harga")),
+                "charge_type": jenis_biaya(row.get("Jenis Biaya")),
                 "remarks": txt(row.get("Keterangan")),
             }
         )

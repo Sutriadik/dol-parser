@@ -56,7 +56,9 @@ class SPHItemDetail(BaseModel):
     nomor_part: str | None = Field(
         None, alias="Part Number", description="Nomor part atau SKU produk"
     )
-    volume: float = Field(..., alias="Volume / Qty", description="Jumlah kuantitas/volume barang")
+    volume: float | None = Field(
+        ..., alias="Volume / Qty", description="Jumlah kuantitas/volume barang"
+    )
     satuan: str = Field(
         ...,
         alias="Satuan",
@@ -67,11 +69,18 @@ class SPHItemDetail(BaseModel):
         alias="Periode/Durasi",
         description="Periode waktu atau durasi bulanan/harian jika ada (misal: 12 Bulan, 1 Year)",
     )
-    harga_satuan: float = Field(
+    harga_satuan: float | None = Field(
         ..., alias="Harga Satuan", description="Harga satuan per unit dalam Rupiah"
     )
-    total_harga: float = Field(
+    total_harga: float | None = Field(
         ..., alias="Total Harga", description="Total harga item dalam Rupiah"
+    )
+    # Diisi pembaca tabel dari judul kolom tempat angkanya berada, bukan oleh LLM: field item
+    # dibuang dari skema pass-1 (DETERMINISTIC_FIELDS). Kosong bila judulnya tidak jelas.
+    jenis_biaya: str | None = Field(
+        None,
+        alias="Jenis Biaya",
+        description="OTC (sekali bayar), MRC (biaya bulanan), atau 'OTC dan MRC'",
     )
     keterangan: str | None = Field(
         None, alias="Keterangan", description="Catatan atau keterangan khusus pada baris tabel"

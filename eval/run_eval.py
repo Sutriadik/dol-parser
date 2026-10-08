@@ -8,6 +8,7 @@ naik/turun akurasinya.
 Pemakaian:
     python -m eval.run_eval                                   # evaluasi storage/outputs/extraction
     python -m eval.run_eval --pred-dir path/ --label after_fix  # simpan report dengan label
+    python -m eval.run_eval --banding eval/reports/sebelum.json  # field mana yang naik/turun
 """
 
 import argparse
@@ -200,12 +201,86 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+BENAR = {"exact", "lenient", "correct_null"}
+
+
+def bandingkan_laporan(lama: dict[str, Any], baru: dict[str, Any]) -> dict[str, Any]:
+    """
+    Perbandingan PER FIELD antara dua report. Angka ringkasan bisa menutupi regresi: eval
+    2026-10-07 menaikkan rata-rata lenient sambil menurunkan field kritis. Dengan golden
+    sekecil ini (4 dokumen), satu field yang turun lebih bermakna daripada selisih rata-rata.
+
+    Hanya dokumen yang ada di kedua report yang dibandingkan.
+    """
+
+    def per_dok(laporan):
+        return {
+            r["document"]: {row["field"]: row for row in r["rows"]}
+            for r in laporan.get("results", [])
+            if r.get("golden_terverifikasi", True)
+        }
+
+    a, b = per_dok(lama), per_dok(baru)
+    turun, naik, lolos_salah_baru = [], [], []
+    for dok in sorted(set(a) & set(b)):
+        for field in sorted(set(a[dok]) & set(b[dok])):
+            x, y = a[dok][field], b[dok][field]
+            catatan = {
+                "document": dok,
+                "field": field,
+                "critical": bool(y.get("critical")),
+                "sebelum": x["verdict"],
+                "sesudah": y["verdict"],
+                "expected": y.get("expected"),
+                "predicted": y.get("predicted"),
+            }
+            if x["verdict"] in BENAR and y["verdict"] not in BENAR:
+                turun.append(catatan)
+            elif x["verdict"] not in BENAR and y["verdict"] in BENAR:
+                naik.append(catatan)
+            if y.get("false_acceptance") and not x.get("false_acceptance"):
+                lolos_salah_baru.append(catatan)
+    return {
+        "turun": turun,
+        "naik": naik,
+        "lolos_salah_baru": lolos_salah_baru,
+        "dokumen_tidak_terbanding": sorted(set(a) ^ set(b)),
+    }
+
+
+def _cetak_banding(beda: dict[str, Any], nama_lama: str) -> None:
+    print(f"\n🔀 BANDING dengan {nama_lama}")
+    for judul, kunci in (
+        ("📉 Turun", "turun"),
+        ("📈 Naik", "naik"),
+        ("⚠️  Nilai salah yang BARU lolos sebagai bukti kuat/cukup", "lolos_salah_baru"),
+    ):
+        print(f"   {judul}: {len(beda[kunci])}")
+        for c in beda[kunci]:
+            flag = "❗" if c["critical"] else "  "
+            print(
+                f"     {flag}{c['document']} | {c['field']}: {c['sebelum']} -> {c['sesudah']} "
+                f"(expected={str(c['expected'])[:40]!r} got={str(c['predicted'])[:40]!r})"
+            )
+    if beda["dokumen_tidak_terbanding"]:
+        print(
+            "   Tidak terbanding (tidak ada, atau golden belum dikoreksi, di salah satu report): "
+            f"{beda['dokumen_tidak_terbanding']}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate extraction outputs against golden files")
     parser.add_argument("--pred-dir", default=str(DEFAULT_PRED_DIR))
     parser.add_argument("--label", default=None, help="Simpan report ke eval/reports/<label>.json")
     parser.add_argument(
         "--verbose", action="store_true", help="Tampilkan semua field, bukan hanya yang salah"
+    )
+    parser.add_argument(
+        "--banding",
+        default=None,
+        help="Report lama (eval/reports/<label>.json). Keluar dengan kode 2 bila ada field "
+        "yang turun atau nilai salah yang baru lolos.",
     )
     args = parser.parse_args()
 
@@ -287,6 +362,13 @@ def main() -> int:
             encoding="utf-8",
         )
         print(f"💾 Report disimpan: {out}")
+
+    if args.banding:
+        lama = json.loads(Path(args.banding).read_text(encoding="utf-8"))
+        beda = bandingkan_laporan(lama, {"results": results})
+        _cetak_banding(beda, args.banding)
+        if beda["turun"] or beda["lolos_salah_baru"]:
+            return 2
     return 0
 
 

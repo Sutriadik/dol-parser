@@ -30,6 +30,7 @@ from app.companion.common import (
     extraction_run_row,
     is_our_org,
     iso,
+    jenis_biaya,
     num,
     parse_indonesian_date,
     txt,
@@ -59,6 +60,36 @@ def _roles(p1: dict[str, Any], p2: dict[str, Any]) -> dict[str, Any]:
         "Pihak Kedua": "pelaksana",
         "catatan": f"[warning] Peran pihak kontrak belum pasti ({alasan}); sementara "
         f"Pihak Pertama dianggap pemberi kerja. Mohon dicek.",
+    }
+
+
+# Sebutan SATU termin. "Termin sebanyak 2" atau "masing-masing termin" sengaja tidak cocok:
+# kalimat seperti itu menjelaskan beberapa termin sekaligus.
+_TERMIN = re.compile(
+    r"\btermin\s+(?:ke[-\s]*)?(?:[IVX]+|\d+|pertama|kedua|ketiga|keempat|kelima|terakhir)\b"
+    r"|\buang\s+muka\b|\bdown\s+payment\b|\bpelunasan\b|\bretensi\b",
+    re.IGNORECASE,
+)
+_NOMINAL_RP = re.compile(r"Rp\.*\s*(\d[\d.,]*\d)", re.IGNORECASE)
+_PERSEN = re.compile(r"\b\d{1,3}(?:[.,]\d+)?\s*%")
+_BANYAK_TERMIN = re.compile(r"masing[-\s]*masing|\bsetiap\b|\btiap\b|per\s*bulan", re.I)
+
+
+def _ketentuan_pembayaran(teks: str) -> dict[str, Any]:
+    """
+    Satu baris Ketentuan Pembayaran -> sebutan termin, nominal, persentase. Hanya yang
+    tertulis: nominal diisi bila kalimat menyebut satu termin dengan tepat satu nominal Rp.
+    Tidak ada pembagian total per termin dan tidak ada nominal dari persentase (aturan 3).
+    """
+    sebutan = [m.group(0) for m in _TERMIN.finditer(teks)]
+    bernomor = {s.lower() for s in sebutan if s.lower().startswith("termin")}
+    satu_termin = bool(sebutan) and len(bernomor) <= 1 and not _BANYAK_TERMIN.search(teks)
+    nominal = {num(m.group(1)) for m in _NOMINAL_RP.finditer(teks)} - {None}
+    persen = {p.replace(" ", "") for p in _PERSEN.findall(teks)}
+    return {
+        "term_label_text": sebutan[0] if satu_termin else None,
+        "amount": nominal.pop() if satu_termin and len(nominal) == 1 else None,
+        "percentage_text": persen.pop() if len(persen) == 1 else None,
     }
 
 
@@ -161,6 +192,7 @@ def map_contract(
                 "period": txt(row.get("Periode/Durasi")),
                 "unit_price": num(row.get("Harga Satuan")),
                 "line_total": num(row.get("Jumlah Harga")),
+                "charge_type": jenis_biaya(row.get("Jenis Biaya")),
                 "remarks": txt(row.get("Keterangan")),
             }
         )
@@ -186,12 +218,35 @@ def map_contract(
             }
         )
 
+    # Termin dan syarat pembayaran. Semua baris disimpan (sebutan termin kosong = syarat umum);
+    # line_no = indeks mentah + 1, sama dengan "Ketentuan Pembayaran[i]" di Hasil Ekstraksi.
+    ketentuan_mentah = data.get("Ketentuan Pembayaran") or []
+    if not isinstance(ketentuan_mentah, list):
+        ketentuan_mentah = [ketentuan_mentah]
+    payment_terms = []
+    for i, mentah in enumerate(ketentuan_mentah):
+        teks = txt(mentah)
+        if not teks:
+            continue
+        ev = evidence_for(result, f"Ketentuan Pembayaran[{i}]") or {}
+        payment_terms.append(
+            {
+                "_contract_ref": doc_key,
+                "line_no": i + 1,
+                "term_text": teks,
+                **_ketentuan_pembayaran(teks),
+                "evidence_page": ev.get("page"),
+                "evidence_quote": txt(ev.get("evidence_text")),
+            }
+        )
+
     return {
         "document": [document],
         "contract": [contract],
         "contract_party": parties,
         "contract_item": items,
         "contract_requirement": requirements,
+        "contract_payment_term": payment_terms,
         "extracted_field": extracted_field_rows(result, doc_key),
         "extraction_run": [extraction_run_row(result, doc_key, SCHEMA_VERSION)],
     }

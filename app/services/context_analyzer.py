@@ -26,6 +26,12 @@ from app.extractors.deterministic.numbers import normalize_id_money_in_text
 from app.logger import logger
 
 
+def _di_baris_tabel(text: str, m: re.Match) -> bool:
+    """Kecocokan regex jatuh di baris tabel markdown ("| ... |")."""
+    awal = text.rfind("\n", 0, m.start()) + 1
+    return text[awal : m.start()].lstrip().startswith("|")
+
+
 @dataclass
 class DocumentSection:
     title: str
@@ -257,13 +263,26 @@ class ContextAnalyzer:
         job_patterns = [
             r"Nama\s+Pekerjaan\s*:?\s*([^\n]+)",
             r"memberi\s+perintah\s+kerja\s+([\s\S]+?)\s+(?:kepada\s*:|dengan\s+uraian|\s+sesuai)",
-            r"(?:tentang|perihal|mengenai)\s+([\s\S]+?)(?:\s+maka\s+kami|\s+antara|\s+nomor|\n\n|$)",
+            # Berhenti di label kop berikutnya ("Lampiran :", "Kepada Yth", "Dengan hormat")
+            # dan di "tanggal <angka>" pada rujukan surat. Isian yang diawali label kop
+            # berarti OCR menumpuk kolom label ("Perihal\nLampiran ..."); tangkapan itu
+            # dilewati dan pencarian lanjut ke "perihal" berikutnya.
+            r"\b(?:tentang|perihal|mengenai)(?:\s*:)?\s+(?!(?:lampiran|kepada|yth)\b)([\s\S]+?)"
+            r"(?:\s+maka\s+kami|\s+antara|\s+nomor|\s+tanggal\s+\d|\s+(?:lampiran|kepada|yth)\s*:"
+            r"|\n\s*(?:lampiran|kepada|yth|dengan\s+hormat)\b|\n\n|$)",
             r"Jumlah\s+harga\s+untuk\s+([\s\S]+?)\s+sebesar\s+Rp",
             r"(?:^|\n)\s*Lampiran\s*(?:SPK)?\s*:\s*([^\n]+)",
             r"##\s*1\.\s*LINGKUP\s+PEKERJAAN[\s\S]*?(?:memberi\s+perintah\s+kerja|melaksanakan|pekerjaan)\s+([\s\S]+?)\s+(?:dengan|sesuai|yang\s+diminta)",
         ]
         for jp in job_patterns:
-            m_job = re.search(jp, text, re.IGNORECASE)
+            # Kecocokan di baris tabel dilewati: "| No | Nama Pekerjaan | Pelanggan | Qty |" adalah
+            # judul kolom, bukan label "Nama Pekerjaan: ...". Dulu (Nota Pesanan, 8 Okt 2026) pola
+            # pertama menangkap sisa judul kolom sebagai nama pekerjaan, hint-nya disisipkan ke
+            # dalam tabel, dan LLM menyalin isi baris tabel ("Pelanggan: ..., Masa Layanan: 8").
+            m_job = next(
+                (m for m in re.finditer(jp, text, re.IGNORECASE) if not _di_baris_tabel(text, m)),
+                None,
+            )
             if m_job:
                 raw_job = re.sub(r"[\r\n\t]+", " ", m_job.group(1)).strip()
                 raw_job = re.sub(
@@ -362,13 +381,18 @@ class ContextAnalyzer:
         elif re.search(r"(?:1\.|\bI\.)\s*(?:PERUSAHAAN|PT\s+)", text, re.IGNORECASE) or re.search(
             r'selanjutnya disebut\s*["\']TELKOM', text, re.IGNORECASE
         ):
+            # Penanda butir "1."/"2." harus berdiri sendiri. Tanpa batas ini "1." di dalam NPWP
+            # semacam "01.234.567.8-901.000" dianggap awal blok pihak pertama (terjadi di kontrak
+            # eval setelah OCR tidak lagi membuang baris akta, 8 Okt 2026): nama perusahaan
+            # tercemar "... Tbk Nomor <akta> tanggal <tgl>", alamat terpotong, dan LLM
+            # menyalin hint itu ke hasil.
             p1_m = re.search(
-                r"(?:antara pihak-pihak:?[\s\n]*)?(?:1\.|\bI\.)\s*([\s\S]*?)(?=(?:\n\s*[-–•*]?\s*(?:2\.|\bII\.)|\n\s*II\.|\n\s*2\.))",  # noqa: E501 (pola regex dibiarkan utuh)
+                r"(?:antara pihak-pihak:?[\s\n]*)?(?:(?<![\w.])1\.|\bI\.)\s*([\s\S]*?)(?=(?:\n\s*[-–•*]?\s*(?:2\.|\bII\.)|\n\s*II\.|\n\s*2\.))",  # noqa: E501 (pola regex dibiarkan utuh)
                 text,
                 re.IGNORECASE,
             )
             p2_m = re.search(
-                r"(?:[-–•*]?\s*(?:2\.|\bII\.)|\bII\.)\s*([\s\S]*?)(?=(?:Selanjutnya dalam Kontrak|Para Pihak|Dengan terlebih dahulu|MENERANGKAN))",  # noqa: E501 (pola regex dibiarkan utuh)
+                r"(?:[-–•*]?\s*(?:(?<![\w.])2\.|\bII\.)|\bII\.)\s*([\s\S]*?)(?=(?:Selanjutnya dalam Kontrak|Para Pihak|Dengan terlebih dahulu|MENERANGKAN))",  # noqa: E501 (pola regex dibiarkan utuh)
                 text,
                 re.IGNORECASE,
             )

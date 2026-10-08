@@ -6,13 +6,15 @@ boneka. Yang diuji adalah kontrak HTTP-nya, karena itu yang dipegang n8n.
 """
 
 import io
+import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app import main
 from app.config import config
-from app.services.job_queue import DONE, JobQueue
+from app.services.job_queue import DONE, Job, JobQueue
 
 PDF = b"%PDF-1.4\n% dokumen uji\n"
 
@@ -166,3 +168,163 @@ def test_cors_tidak_lagi_wildcard():
     """
     assert "*" not in config.cors_origins()
     assert config.cors_origins()
+
+
+# --------------------------------------------------------------------- mode produksi
+def _job(**k):
+    isian = {
+        "job_id": "j1",
+        "document_id": "d1",
+        "filename": "a.pdf",
+        "doc_type": "auto",
+        "ocr": None,
+        "max_pages": None,
+        "callback_url": None,
+        "source_path": Path("a.pdf"),
+    }
+    return Job(**{**isian, **k})
+
+
+def test_produksi_tanpa_api_key_gagal_start(monkeypatch):
+    """
+    Peringatan di log mudah terlewat; server produksi yang terbuka tanpa autentikasi berarti
+    siapa pun yang menjangkau portnya bisa membaca hasil ekstraksi kontrak pelanggan.
+    """
+    monkeypatch.setattr(config, "ENV", "production")
+    monkeypatch.setattr(config, "API_KEY", "")
+    with pytest.raises(RuntimeError, match="OPENADE_API_KEY"), TestClient(main.app):
+        pass
+
+
+def test_galat_500_di_produksi_tidak_membocorkan_isi(monkeypatch):
+    """Pesan exception bisa memuat potongan dokumen atau path server; klien cukup rujukan."""
+
+    def meledak(*_a, **_k):
+        raise ValueError("Nomor Kontrak 001/RAHASIA/2026 di /srv/data/kontrak.pdf")
+
+    monkeypatch.setattr(config, "ENV", "production")
+    monkeypatch.setattr(config, "API_KEY", "rahasia")
+    monkeypatch.setattr(main.engine, "extract", meledak)
+    with TestClient(main.app, raise_server_exceptions=False) as c:
+        r = c.post(
+            "/api/v1/extract",
+            data={"markdown_text": "x"},
+            headers={"X-API-Key": "rahasia"},
+        )
+    assert r.status_code == 500
+    assert "RAHASIA" not in r.text and "/srv" not in r.text
+    assert "Rujukan" in r.json()["detail"]
+
+
+def test_galat_500_di_pengembangan_tetap_menampilkan_sebab(monkeypatch):
+    def meledak(*_a, **_k):
+        raise ValueError("Ollama tidak menjawab")
+
+    monkeypatch.setattr(config, "ENV", "development")
+    monkeypatch.setattr(config, "API_KEY", "")
+    monkeypatch.setattr(main.engine, "extract", meledak)
+    with TestClient(main.app) as c:
+        r = c.post("/api/v1/extract", data={"markdown_text": "x"})
+    assert r.status_code == 500
+    assert "Ollama tidak menjawab" in r.json()["detail"]
+
+
+def test_galat_job_di_produksi_tidak_membocorkan_isi(monkeypatch):
+    """job.error ikut terkirim ke callback dan GET /jobs, jadi disaring juga."""
+
+    def meledak(*_a, **_k):
+        raise ValueError("Nomor Kontrak 001/RAHASIA/2026")
+
+    monkeypatch.setattr(config, "ENV", "production")
+    monkeypatch.setattr(main.engine, "process_full", meledak)
+    monkeypatch.setattr(main, "_cleanup", lambda _p: None)
+    job = _job()
+    with pytest.raises(RuntimeError) as info:
+        main._run_job(job)
+    assert "RAHASIA" not in str(info.value)
+    assert "j1" in str(info.value)
+
+
+# --------------------------------------------------------------------- callback_url
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "ftp://n8n.lokal/hook", "n8n.lokal/hook"])
+def test_callback_selain_http_ditolak(client, url):
+    r = _kirim(client, callback_url=url)
+    assert r.status_code == 400
+
+
+def test_callback_ke_host_di_luar_daftar_ditolak(client, monkeypatch):
+    """
+    Tanpa daftar host, siapa pun yang memegang API key bisa menyuruh server ini mem-POST
+    hasil ekstraksi kontrak ke alamat mana saja, termasuk layanan internal (SSRF).
+    """
+    monkeypatch.setattr(config, "CALLBACK_ALLOWED_HOSTS", "n8n.internal")
+    assert _kirim(client, callback_url="http://169.254.169.254/latest").status_code == 400
+    assert _kirim(client, callback_url="https://penyerang.example/x").status_code == 400
+    assert _kirim(client, callback_url="https://N8N.internal:5678/webhook/a").status_code == 202
+
+
+def test_callback_tanpa_daftar_host_ditolak_di_produksi(client, monkeypatch):
+    monkeypatch.setattr(config, "ENV", "production")
+    monkeypatch.setattr(config, "API_KEY", "rahasia")
+    monkeypatch.setattr(config, "CALLBACK_ALLOWED_HOSTS", "")
+    r = client.post(
+        "/api/v1/jobs",
+        files={"file": ("a.pdf", io.BytesIO(PDF), "application/pdf")},
+        data={"callback_url": "https://n8n.internal/webhook/a"},
+        headers={"X-API-Key": "rahasia"},
+    )
+    assert r.status_code == 400
+    assert "CALLBACK_ALLOWED_HOSTS" in r.json()["detail"]
+
+
+def test_callback_ditandatangani_hmac_bila_secret_diisi(monkeypatch):
+    """n8n bisa memastikan hasil benar-benar dari service ini, bukan kiriman pihak lain."""
+    import hashlib
+    import hmac
+
+    terkirim = {}
+
+    class KlienBoneka:
+        def __init__(self, **_k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+        def post(self, url, content=None, headers=None, **_k):
+            terkirim.update(url=url, content=content, headers=headers or {})
+
+            class R:
+                status_code = 200
+
+            return R()
+
+    monkeypatch.setattr(config, "CALLBACK_SECRET", "kunci-uji")
+    monkeypatch.setattr(main.httpx, "Client", KlienBoneka)
+    job = _job(callback_url="http://n8n/h")
+    assert main._notify_callback(job) == "200"
+
+    harapan = hmac.new(b"kunci-uji", terkirim["content"], hashlib.sha256).hexdigest()
+    assert terkirim["headers"]["X-OpenADE-Signature"] == f"sha256={harapan}"
+    assert json.loads(terkirim["content"])["job_id"] == "j1"
+
+
+# --------------------------------------------------------------------- retensi unggahan
+def test_unggahan_yatim_dihapus_saat_server_naik():
+    """
+    Antrean job ada di memori. Bila server mati saat job masih antre, PDF kontrak yang sudah
+    diunggah tertinggal selamanya: tidak ada lagi yang tahu berkas itu ada. Server berjalan
+    satu proses (docker-compose, make serve), jadi saat naik tidak ada job lain yang memegang
+    berkas di folder ini.
+    """
+    yatim = config.TEMP_UPLOADS / "a1b2c3"
+    yatim.mkdir(parents=True)
+    (yatim / "kontrak.pdf").write_bytes(PDF)
+    (config.TEMP_UPLOADS / ".gitkeep").touch()
+    with TestClient(main.app):
+        pass
+    assert not yatim.exists()
+    assert (config.TEMP_UPLOADS / ".gitkeep").exists()

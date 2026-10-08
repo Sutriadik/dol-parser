@@ -129,3 +129,53 @@ def test_harga_format_inggris_dari_vendor_terbaca():
     e = _extract_sph()
     e["data"]["Grand Total"] = "604,800,000"
     assert map_sph(e)["sph"][0]["total_price"] == 604800000.0
+
+
+# Lihat penjelasan NASIB_KONTRAK di test_companion_contract.py.
+NASIB_SPH = {
+    "Vendor.Nama Vendor": "kolom",
+    "Vendor.Alamat Vendor": "hasil_ekstraksi",
+    "Vendor.Kontak / Email": "hasil_ekstraksi",
+    "Vendor.NPWP": "tidak_disimpan",  # FIELD_TIDAK_DISIMPAN
+    "Tujuan Surat / Klien": "kolom",
+    "Nomor SPH": "kolom",
+    "Tanggal SPH": "kolom",
+    "Perihal / Nama Pekerjaan": "kolom",
+    "Masa Berlaku Penawaran": "kolom",
+    "Berlaku Sampai Tanggal": "hasil_ekstraksi",
+    "Jangka Waktu Pengiriman": "hasil_ekstraksi",
+    "Lokasi Pekerjaan": "hasil_ekstraksi",
+    "Daftar Penawaran Harga[].No": "tidak_disimpan",  # SKIP_KEYS; line_no = urutan baca
+    "Daftar Penawaran Harga[].Kategori/Kelompok": "kolom",
+    "Daftar Penawaran Harga[].Nama Barang/Jasa": "kolom",
+    "Daftar Penawaran Harga[].Spesifikasi": "kolom",
+    "Daftar Penawaran Harga[].Brand/Merek": "kolom",
+    "Daftar Penawaran Harga[].Part Number": "kolom",
+    "Daftar Penawaran Harga[].Volume / Qty": "kolom",
+    "Daftar Penawaran Harga[].Satuan": "kolom",
+    "Daftar Penawaran Harga[].Periode/Durasi": "kolom",
+    "Daftar Penawaran Harga[].Harga Satuan": "kolom",
+    "Daftar Penawaran Harga[].Total Harga": "kolom",
+    "Daftar Penawaran Harga[].Jenis Biaya": "kolom",  # 2026.10.4
+    "Daftar Penawaran Harga[].Keterangan": "kolom",
+    "Daftar Penawaran Harga[].Atribut Tambahan": "tidak_disimpan",  # SKIP_KEYS
+    "Subtotal": "kolom",
+    "Persentase PPN": "kolom",
+    "Nilai PPN": "kolom",
+    "Grand Total": "kolom",
+    "Jumlah Terbilang": "hasil_ekstraksi",
+    "Mekanisme Skema Pembayaran": "kolom",
+    "Garansi / SLA": "hasil_ekstraksi",
+    "Catatan Khusus": "hasil_ekstraksi",
+    "Syarat dan Ketentuan[]": "hasil_ekstraksi",
+    "Daftar Tabel Terstruktur[]": "tidak_disimpan",  # SKIP_KEYS
+}
+
+
+def test_setiap_field_sph_punya_nasib_tercatat():
+    from app.schemas.sph import SPHExtractionSchema
+    from tests.test_companion_contract import _bandingkan_nasib, nasib_sebenarnya
+
+    dasar = {"Vendor": {}, "Daftar Penawaran Harga": [{"Nama Barang/Jasa": "Barang dasar"}]}
+    sebenarnya = nasib_sebenarnya(SPHExtractionSchema, map_sph, dasar, "sph")
+    _bandingkan_nasib(sebenarnya, NASIB_SPH)

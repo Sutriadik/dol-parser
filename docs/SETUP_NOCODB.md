@@ -1,7 +1,7 @@
 # Menyiapkan NocoDB & mengirim hasil parser
 
 Satu pertanyaan: **apa yang harus disiapkan supaya hasil parser masuk NocoDB dan bisa
-dikonfirmasi PM?** Skema berasal dari repo `dol-schema` (versi `companion-2026.10.3`);
+dikonfirmasi PM?** Skema berasal dari repo `dol-schema` (versi `companion-2026.10.4`);
 jangan membuat tabel dengan tangan.
 
 Semua perintah dijalankan dari folder `dol-parser/`, setelah memuat `.env`:
@@ -23,6 +23,7 @@ Hanya tabel yang **berlaku**. Judul tabel & kolom berbahasa Indonesia:
 | Pihak Kontrak | `contract_party` | sistem |
 | Rincian Kontrak | `contract_item` | sistem |
 | Syarat Kontrak | `contract_requirement` | sistem |
+| Ketentuan Pembayaran | `contract_payment_term` | sistem |
 | SPH Vendor | `sph` | sistem |
 | Rincian SPH | `sph_item` | sistem |
 | Hasil Ekstraksi | `extracted_field` | sistem |
@@ -46,7 +47,7 @@ NOCODB_API_TOKEN=<token>
 
 ```bash
 make buat-base                     # atau: make buat-base JUDUL="DOL Schema uji"
-# -> base "DOL Schema 2026.10.3" + 9 tabel + 8 relasi Link, lalu mencetak:
+# -> base "DOL Schema 2026.10.4" + 10 tabel + 9 relasi Link, lalu mencetak:
 #    NOCODB_BASE_ID=...
 #    NOCODB_TABLE_IDS=document:...,contract:...,...,field_review:...
 ```
@@ -68,7 +69,8 @@ tidak mengubahnya di tempat. Buat base baru.
 
 **Base versi lama tidak bisa dipakai.** Judul kolom dan pilihan nilai berubah di 2026.10.2
 (mis. `auto_verified` → `bukti_kuat`), kunci dokumen kini sha256, dan kolom NPWP dihapus di
-2026.10.3. Base lama biarkan
+2026.10.3, dan 2026.10.4 menambah kolom Jenis Biaya (OTC/MRC) serta tabel Ketentuan
+Pembayaran. Base lama biarkan
 sebagai arsip; jangan dihapus sebelum datanya tidak diperlukan lagi.
 
 ## Langkah 3 — Periksa

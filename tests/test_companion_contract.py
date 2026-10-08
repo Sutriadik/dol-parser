@@ -140,6 +140,7 @@ def test_payload_kontrak_hanya_tabel_berlaku_dan_lolos_validasi():
         "contract_party",
         "contract_item",
         "contract_requirement",
+        "contract_payment_term",
         "extracted_field",
         "extraction_run",
     }
@@ -283,3 +284,269 @@ def test_eval_tidak_menghitung_field_yang_sengaja_dihapus():
     }
     hasil = evaluate_document(golden, {"data": {"Nomor Kontrak Kerja": "K/1"}})
     assert [r["field"] for r in hasil["rows"]] == ["Nomor Kontrak Kerja"]
+
+
+# --------------------------------------------------------------------- nasib setiap field
+# Daftar ini adalah keputusan tertulis: setiap field yang diminta ke LLM berakhir di mana.
+#   "kolom"           -> kolom tabel domain (contract, ...); umumnya juga di Hasil Ekstraksi
+#   "hasil_ekstraksi" -> hanya baris di Hasil Ekstraksi (dilihat PM), tanpa kolom untuk n8n
+#   "tidak_disimpan"  -> tidak sampai ke NocoDB sama sekali; hanya ada di *.extract.json
+#
+# Dua kegunaan:
+# 1. Field yang diekstrak tapi diam-diam dibuang pemeta langsung terlihat.
+# 2. field_path = alias Pydantic, dan keputusan PM (field_review) dikunci dengan field_path.
+#    Mengganti nama alias membuat keputusan PM lama tidak lagi cocok dengan baris mana pun.
+#    Tes ini gagal saat alias berubah, supaya perubahan itu disengaja, bukan kebetulan.
+NASIB_KONTRAK = {
+    "Pihak Pertama.Nama Perusahaan": "kolom",
+    "Pihak Pertama.NPWP": "tidak_disimpan",  # FIELD_TIDAK_DISIMPAN, keputusan 2026-10-04
+    "Pihak Pertama.Nama Representative": "kolom",
+    "Pihak Pertama.Jabatan": "kolom",
+    "Pihak Pertama.Alamat": "kolom",
+    "Pihak Kedua.Nama Perusahaan": "kolom",
+    "Pihak Kedua.NPWP": "tidak_disimpan",
+    "Pihak Kedua.Nama Representative": "kolom",
+    "Pihak Kedua.Jabatan": "kolom",
+    "Pihak Kedua.Alamat": "kolom",
+    "List Item/Barang[].Nomor Item": "tidak_disimpan",  # SKIP_KEYS; line_no = urutan baca
+    "List Item/Barang[].Kategori/Kelompok": "kolom",
+    "List Item/Barang[].Deskripsi Item/Barang/Pekerjaan": "kolom",
+    "List Item/Barang[].Spesifikasi": "kolom",
+    "List Item/Barang[].volume": "kolom",
+    "List Item/Barang[].unit": "kolom",
+    "List Item/Barang[].Periode/Durasi": "kolom",
+    "List Item/Barang[].Harga Satuan": "kolom",
+    "List Item/Barang[].Jumlah Harga": "kolom",
+    "List Item/Barang[].Jenis Biaya": "kolom",  # 2026.10.4; kolom saja (SKIP_KEYS)
+    "List Item/Barang[].Keterangan": "kolom",
+    # OTC/MRC dsb. Dilewati locator (SKIP_KEYS) karena bentuknya dict bebas.
+    "List Item/Barang[].Atribut Tambahan": "tidak_disimpan",
+    "Nomor Kontrak Kerja": "kolom",
+    "Nomor Kontrak Internal": "kolom",
+    "Daftar Nomor Kontrak[]": "hasil_ekstraksi",
+    "Tanggal Negosiasi": "hasil_ekstraksi",
+    "Nama Pekerjaan": "kolom",
+    "persentase ppn": "kolom",
+    "Jangka Waktu": "kolom",
+    "Durasi Kerja": "kolom",
+    "Nama Bank": "kolom",
+    "Lokasi Cabang Bank": "hasil_ekstraksi",
+    "Nomor Rekening Bank": "kolom",
+    "Nama Rekening Bank": "kolom",
+    "Mekanisme Skema Pembayaran": "kolom",
+    "Ketentuan Pembayaran[]": "kolom",  # 2026.10.4: contract_payment_term
+    "Persentase Sanksi/Penalti": "kolom",
+    "Lokasi": "kolom",
+    "Tanggal Pembuatan Dokumen": "kolom",
+    "sub total": "kolom",
+    "Total PPN": "kolom",
+    "Total Harga Pekerjaan": "kolom",
+    "Jumlah Terbilang": "hasil_ekstraksi",
+    "Garansi": "hasil_ekstraksi",
+    "Klausul Jaminan.Nomor Pasal": "hasil_ekstraksi",
+    "Klausul Jaminan.Uraian Jaminan": "hasil_ekstraksi",
+    "Syarat Lampiran Wajib BAST[]": "kolom",
+    "Dokumen Pendukung[].Nama Dokumen": "hasil_ekstraksi",
+    "Dokumen Pendukung[].Nomor Dokumen": "hasil_ekstraksi",
+    "Dokumen Pendukung[].Tanggal Dokumen": "hasil_ekstraksi",
+    "Daftar Pasal Kontrak[].Nomor Pasal": "hasil_ekstraksi",
+    "Daftar Pasal Kontrak[].Judul Pasal": "hasil_ekstraksi",
+    "Daftar Penandatangan[].Nama": "hasil_ekstraksi",
+    "Daftar Penandatangan[].Jabatan": "hasil_ekstraksi",
+    "Informasi Bea Meterai": "hasil_ekstraksi",
+    "Daftar Tabel Terstruktur[]": "tidak_disimpan",  # SKIP_KEYS
+}
+
+
+def _jalur_daun(model, awalan=""):
+    """Semua field daun model Pydantic sebagai jalur alias; daftar ditulis `nama[]`."""
+    import types
+    import typing
+
+    from pydantic import BaseModel
+
+    def buka(t):
+        args = [a for a in typing.get_args(t) if a is not type(None)]
+        if typing.get_origin(t) is list:
+            return True, args[0]
+        if typing.get_origin(t) in (typing.Union, types.UnionType) and len(args) == 1:
+            return buka(args[0])
+        return False, t
+
+    for nama, f in model.model_fields.items():
+        jalur = awalan + (f.alias or nama)
+        daftar, t = buka(f.annotation)
+        model_anak = isinstance(t, type) and issubclass(t, BaseModel)
+        if daftar:
+            yield from _jalur_daun(t, jalur + "[].") if model_anak else [jalur + "[]"]
+        elif model_anak:
+            yield from _jalur_daun(t, jalur + ".")
+        else:
+            yield jalur
+
+
+def _isi(data, jalur, nilai):
+    """Isi `nilai` di `jalur` (format _jalur_daun); elemen daftar selalu indeks 0."""
+    bagian = jalur.split(".")
+    cur = data
+    for i, b in enumerate(bagian):
+        akhir = i == len(bagian) - 1
+        kunci = b.removesuffix("[]")
+        if b.endswith("[]"):
+            daftar = cur.setdefault(kunci, [])
+            if akhir:
+                daftar.append(nilai)
+                return
+            if not daftar:
+                daftar.append({})
+            cur = daftar[0]
+        elif akhir:
+            cur[kunci] = nilai
+        else:
+            cur = cur.setdefault(kunci, {})
+
+
+# Field berpilihan: pemeta sengaja mengosongkan nilai asing, jadi butuh contoh yang sah.
+_NILAI_CONTOH = {"Jenis Biaya": "MRC"}
+
+
+def nasib_sebenarnya(model, pemeta, dasar, doc_type):
+    """
+    Uji perilaku, bukan membaca kode pemeta: tiap field diisi sendirian di atas data `dasar`
+    (yang cukup supaya baris anak tidak dibuang), lalu dilihat sampai ke mana nilainya.
+    Bukti dibangun dengan iter_leaf_fields yang sama dengan engine.
+    """
+    from app.evidence.locator import iter_leaf_fields
+
+    def jalankan(data):
+        bukti = [
+            {"field": f, "value": v, "status": "AUTO_VERIFIED"} for f, v in iter_leaf_fields(data)
+        ]
+        hasil = {"document_type": doc_type, "data": data, "evidence": bukti}
+        hasil["run_info"] = {"document_id": "sha-uji"}
+        return pemeta(hasil)
+
+    def domain(payload):
+        lewati = ("document", "extracted_field", "extraction_run")
+        return {k: v for k, v in payload.items() if k not in lewati}
+
+    acuan = domain(jalankan(copy.deepcopy(dasar)))
+    nasib = {}
+    for jalur in _jalur_daun(model):
+        data = copy.deepcopy(dasar)
+        _isi(data, jalur, _NILAI_CONTOH.get(jalur.rsplit(".", 1)[-1], "1234567"))
+        payload = jalankan(data)
+        konkret = jalur.replace("[]", "[0]")
+        if domain(payload) != acuan:
+            nasib[jalur] = "kolom"
+        elif any(r["field_path"] == konkret for r in payload["extracted_field"]):
+            nasib[jalur] = "hasil_ekstraksi"
+        else:
+            nasib[jalur] = "tidak_disimpan"
+    return nasib
+
+
+def _bandingkan_nasib(sebenarnya, tercatat):
+    baru = sorted(set(sebenarnya) - set(tercatat))
+    hilang = sorted(set(tercatat) - set(sebenarnya))
+    assert not (baru or hilang), (
+        f"Alias field ekstraksi berubah.\n  baru: {baru}\n  hilang: {hilang}\n"
+        "Bila alias diganti nama, keputusan PM (field_review) dengan field_path lama tidak "
+        "lagi cocok. Catat nasib field baru di daftar NASIB_*."
+    )
+    beda = {j: (tercatat[j], sebenarnya[j]) for j in tercatat if tercatat[j] != sebenarnya[j]}
+    assert not beda, f"Nasib field berbeda dari catatan (tercatat, sebenarnya): {beda}"
+
+
+def test_setiap_field_kontrak_punya_nasib_tercatat():
+    from app.schemas.contract import ContractExtractionSchema
+
+    dasar = {
+        "Pihak Pertama": {"Nama Perusahaan": "PT A"},
+        "Pihak Kedua": {"Nama Perusahaan": "PT B"},
+        "List Item/Barang": [{"Deskripsi Item/Barang/Pekerjaan": "Barang dasar"}],
+    }
+    sebenarnya = nasib_sebenarnya(ContractExtractionSchema, map_contract, dasar, "contract")
+    _bandingkan_nasib(sebenarnya, NASIB_KONTRAK)
+
+
+# --------------------------------------------------------------------- termin & OTC/MRC
+def _dengan_ketentuan(*baris):
+    raw = _sample_contract_extraction()
+    raw["data"]["Ketentuan Pembayaran"] = list(baris)
+    raw["evidence"].append(
+        {
+            "field": "Ketentuan Pembayaran[0]",
+            "value": baris[0],
+            "page": 4,
+            "evidence_text": baris[0],
+            "status": "AUTO_VERIFIED",
+        }
+    )
+    return map_contract(raw)["contract_payment_term"]
+
+
+def test_termin_tertulis_tersimpan_dengan_nominalnya():
+    rows = _dengan_ketentuan(
+        "Termin I (Januari s.d. Maret) sebesar Rp. 27,500,000",
+        "Termin II pelunasan sebesar Rp...36.000.000, dibayarkan setelah BAST",
+    )
+    assert [(r["line_no"], r["term_label_text"], r["amount"]) for r in rows] == [
+        (1, "Termin I", 27_500_000),
+        (2, "Termin II", 36_000_000),
+    ]
+    assert rows[0]["evidence_page"] == 4 and rows[0]["evidence_quote"]
+
+
+def test_kalimat_banyak_termin_tidak_dipecah_atau_dihitung():
+    """
+    "2 termin, masing-masing Rp X": membuat dua baris atau menulis X sebagai nilai satu
+    termin adalah hasil hitungan, bukan yang tertulis (aturan 3). Kalimatnya disimpan utuh.
+    """
+    rows = _dengan_ketentuan(
+        "Pembayaran secara Termin sebanyak 2 (dua) termin, dengan masing-masing termin "
+        "sebesar Rp. 100.000.000,-"
+    )
+    assert len(rows) == 1
+    assert rows[0]["term_label_text"] is None and rows[0]["amount"] is None
+    assert "masing-masing" in rows[0]["term_text"]
+
+
+def test_syarat_pembayaran_umum_tersimpan_tanpa_label_termin():
+    rows = _dengan_ketentuan(
+        "Surat permohonan pembayaran dilampiri kuitansi bermaterai cukup",
+        "Uang muka 30% dibayarkan setelah PO terbit",
+    )
+    assert rows[0]["term_label_text"] is None and rows[0]["amount"] is None
+    assert rows[1]["term_label_text"] == "Uang muka"
+    assert rows[1]["percentage_text"] == "30%" and rows[1]["amount"] is None
+
+
+def test_termin_dengan_dua_nominal_tidak_memilih_salah_satu():
+    rows = _dengan_ketentuan("Termin I sebesar Rp 10.000.000 dari total Rp 40.000.000")
+    assert rows[0]["term_label_text"] == "Termin I" and rows[0]["amount"] is None
+
+
+def test_jenis_biaya_item_dipetakan_ke_pilihan_skema():
+    raw = _sample_contract_extraction()
+    items = raw["data"]["List Item/Barang"]
+    items[0]["Jenis Biaya"] = "MRC"
+    if len(items) > 1:
+        items[1]["Jenis Biaya"] = "sewa bulanan"  # nilai asing -> kosong, bukan tebakan
+    payload = map_contract(raw)
+    jenis = [r["charge_type"] for r in payload["contract_item"]]
+    assert jenis[0] == "mrc"
+    assert all(j is None for j in jenis[1:])
+    assert validate_payload(payload) == []
+
+
+def test_jenis_biaya_tidak_menambah_antrean_pm():
+    """
+    Jenis Biaya diturunkan dari judul kolom tabel. Grounding hanya bisa mencari teks "MRC" di
+    dokumen, yang tidak membuktikan apa pun, sehingga setiap item muncul sebagai "perlu dicek"
+    (KL FULL SIGNED: 5 baris tambahan). Nilainya tetap terlihat PM di Rincian Kontrak.
+    """
+    from app.evidence.locator import iter_leaf_fields
+
+    data = {"List Item/Barang": [{"Deskripsi Item/Barang/Pekerjaan": "x", "Jenis Biaya": "MRC"}]}
+    assert not any(p.endswith("Jenis Biaya") for p, _ in iter_leaf_fields(data))

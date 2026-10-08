@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import os
 import shutil
@@ -8,6 +10,7 @@ import urllib.request
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 import uvicorn
@@ -55,9 +58,31 @@ tags_metadata = [
 ]
 
 
+def _hapus_unggahan_yatim() -> None:
+    """
+    Antrean job ada di memori, jadi saat server naik tidak ada job yang memegang berkas di
+    TEMP_UPLOADS: semua isinya sisa job yang terputus restart. Tanpa ini, PDF kontrak yang
+    diunggah sebelum server mati tertinggal di disk selamanya. Aman karena server berjalan
+    satu proses (docker-compose, make serve); dengan --workers > 1 ini harus dipindah.
+    """
+    yatim = [p for p in config.TEMP_UPLOADS.iterdir() if p.is_dir()]
+    for p in yatim:
+        shutil.rmtree(p, ignore_errors=True)
+    if yatim:
+        logger.warning(f"🧹 {len(yatim)} unggahan dari job yang terputus restart dihapus.")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Worker antrian dijalankan saat server naik, bukan saat modul di-import."""
+    if config.is_production and not config.API_KEY:
+        # Gagal naik, bukan sekadar peringatan: baris log mudah terlewat, sedangkan server
+        # produksi tanpa autentikasi membuka seluruh hasil ekstraksi kontrak.
+        raise RuntimeError(
+            "OPENADE_ENV=production tetapi OPENADE_API_KEY kosong. Isi API key, atau jalankan "
+            "dengan OPENADE_ENV=development bila memang hanya dijangkau dari localhost."
+        )
+    _hapus_unggahan_yatim()
     job_queue.start()
     if not config.API_KEY:
         logger.warning(
@@ -102,6 +127,43 @@ def require_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> None:
         return
     if x_api_key != config.API_KEY:
         raise HTTPException(status_code=401, detail="X-API-Key tidak valid atau tidak dikirim.")
+
+
+def _galat_internal(e: Exception) -> HTTPException:
+    """
+    Galat tak terduga -> 500. Jejak lengkapnya hanya di log server, dicari lewat nomor
+    rujukan. Di production pesan exception tidak dikirim ke klien: isinya bisa memuat
+    potongan dokumen kontrak atau path server.
+    """
+    rujukan = uuid.uuid4().hex[:8]
+    logger.exception(f"Galat internal (rujukan {rujukan}): {type(e).__name__}: {e}")
+    if config.is_production:
+        return HTTPException(status_code=500, detail=f"Kesalahan internal. Rujukan: {rujukan}")
+    return HTTPException(status_code=500, detail=f"{type(e).__name__}: {e} (Rujukan: {rujukan})")
+
+
+def _cek_callback_url(url: str | None) -> None:
+    """Ditolak saat job dikirim, bukan setelah 3-5 menit ekstraksi."""
+    if not url:
+        return
+    bagian = urlsplit(url)
+    if bagian.scheme not in ("http", "https") or not bagian.hostname:
+        raise HTTPException(
+            status_code=400, detail="callback_url harus URL http(s) lengkap dengan host."
+        )
+    izin = config.callback_hosts()
+    if not izin:
+        if config.is_production:
+            raise HTTPException(
+                status_code=400,
+                detail="callback_url ditolak: CALLBACK_ALLOWED_HOSTS belum diisi di production.",
+            )
+        return
+    if bagian.hostname.lower() not in izin:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Host callback '{bagian.hostname}' tidak ada di CALLBACK_ALLOWED_HOSTS.",
+        )
 
 
 # Engine memuat model secara lazy. Lock memastikan satu dokumen diproses dalam satu waktu:
@@ -266,7 +328,7 @@ def parse_document_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise _galat_internal(e) from e
     finally:
         _cleanup(temp_path)
 
@@ -290,7 +352,7 @@ def extract_document_endpoint(
             extracted, resolved_type = engine.extract(markdown_text, doc_type=doc_type)
         return {"document_type": resolved_type, "data": extracted.model_dump(by_alias=True)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise _galat_internal(e) from e
 
 
 def _build_api_response(result: dict, source_path: Path = None) -> dict:
@@ -401,7 +463,7 @@ def process_full_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise _galat_internal(e) from e
     finally:
         _cleanup(temp_path)
 
@@ -436,38 +498,51 @@ def process_full_endpoint(
 def _run_job(job: Job) -> dict:
     """Dijalankan di worker thread. Membersihkan berkas unggahan apa pun hasilnya."""
     try:
-        with _engine_lock:
-            result = engine.process_full(
-                str(job.source_path),
-                doc_type=job.doc_type,
-                max_pages=job.max_pages,
-                ocr=job.ocr,
-            )
-        response = _build_api_response(result, job.source_path)
-        # document_id dari isi berkas harus cocok dengan yang sudah dibalas ke n8n di awal;
-        # kalau tidak, kunci idempotensi yang dipegang n8n bukan kunci yang masuk NocoDB.
-        actual = (response.get("run_info") or {}).get("document_id")
-        if actual and actual != job.document_id:
-            logger.warning(
-                f"document_id job {job.job_id} berubah: dibalas '{job.document_id}', "
-                f"hasil pipeline '{actual}'. Memakai hasil pipeline."
-            )
-            job.document_id = actual
-        if job.push_to_nocodb:
-            # Push yang gagal tidak menggagalkan job: hasil ekstraksi 3-5 menit tetap bisa
-            # diambil dan dikirim ulang. Statusnya ikut di ringkasan job, supaya n8n yang
-            # hanya polling tanpa include_result tetap tahu barisnya belum masuk.
-            try:
-                response["nocodb_push"] = _push_to_nocodb(response["companion_payload"])
-                job.nocodb_push = "ok"
-            except Exception as e:
-                sebab = e.detail if isinstance(e, HTTPException) else f"{type(e).__name__}: {e}"
-                response["nocodb_push"] = {"error": sebab}
-                job.nocodb_push = f"gagal: {sebab}"
-                logger.error(f"❌ Push NocoDB job {job.job_id} gagal: {sebab}")
-        return response
+        return _run_job_inti(job)
+    except Exception as e:
+        if not config.is_production:
+            raise
+        # job.error ikut dikirim ke callback dan GET /jobs; di production cukup jenis galat
+        # dan nomor job untuk mencari jejak lengkapnya di log.
+        logger.exception(f"Job {job.job_id} gagal: {type(e).__name__}: {e}")
+        raise RuntimeError(
+            f"Pemrosesan gagal ({type(e).__name__}). Rujukan log: job {job.job_id}"
+        ) from None
     finally:
         _cleanup(job.source_path)
+
+
+def _run_job_inti(job: Job) -> dict:
+    with _engine_lock:
+        result = engine.process_full(
+            str(job.source_path),
+            doc_type=job.doc_type,
+            max_pages=job.max_pages,
+            ocr=job.ocr,
+        )
+    response = _build_api_response(result, job.source_path)
+    # document_id dari isi berkas harus cocok dengan yang sudah dibalas ke n8n di awal;
+    # kalau tidak, kunci idempotensi yang dipegang n8n bukan kunci yang masuk NocoDB.
+    actual = (response.get("run_info") or {}).get("document_id")
+    if actual and actual != job.document_id:
+        logger.warning(
+            f"document_id job {job.job_id} berubah: dibalas '{job.document_id}', "
+            f"hasil pipeline '{actual}'. Memakai hasil pipeline."
+        )
+        job.document_id = actual
+    if job.push_to_nocodb:
+        # Push yang gagal tidak menggagalkan job: hasil ekstraksi 3-5 menit tetap bisa
+        # diambil dan dikirim ulang. Statusnya ikut di ringkasan job, supaya n8n yang
+        # hanya polling tanpa include_result tetap tahu barisnya belum masuk.
+        try:
+            response["nocodb_push"] = _push_to_nocodb(response["companion_payload"])
+            job.nocodb_push = "ok"
+        except Exception as e:
+            sebab = e.detail if isinstance(e, HTTPException) else f"{type(e).__name__}: {e}"
+            response["nocodb_push"] = {"error": sebab}
+            job.nocodb_push = f"gagal: {sebab}"
+            logger.error(f"❌ Push NocoDB job {job.job_id} gagal: {sebab}")
+    return response
 
 
 def _notify_callback(job: Job) -> str:
@@ -485,8 +560,14 @@ def _notify_callback(job: Job) -> str:
         "error": job.error,
         "result": job.result,
     }
+    # Body diserialisasi sendiri supaya HMAC dihitung atas byte yang persis dikirim.
+    isi = json.dumps(body, ensure_ascii=False, default=str).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if config.CALLBACK_SECRET:
+        tanda = hmac.new(config.CALLBACK_SECRET.encode(), isi, hashlib.sha256).hexdigest()
+        headers["X-OpenADE-Signature"] = f"sha256={tanda}"
     with httpx.Client(timeout=config.CALLBACK_TIMEOUT) as client:
-        resp = client.post(job.callback_url, json=body)
+        resp = client.post(job.callback_url, content=isi, headers=headers)
         return f"{resp.status_code}"
 
 
@@ -525,6 +606,7 @@ def submit_job_endpoint(
     ),
 ):
     # Ditolak sekarang, bukan setelah 3-5 menit ekstraksi.
+    _cek_callback_url(callback_url)
     if push_to_nocodb:
         _cek_push_aktif()
     temp_path = _save_upload(file)
