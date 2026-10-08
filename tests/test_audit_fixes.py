@@ -121,6 +121,47 @@ def test_judul_kolom_tabel_nama_pekerjaan_bukan_hint_nama_pekerjaan():
     assert "Pengadaan Lisensi Contoh" in hint
 
 
+def test_hint_perihal_berhenti_di_label_kop_berikutnya():
+    """Kop satu baris: "Perihal : X Lampiran : Y Kepada Yth : Z" -> hanya X."""
+    md = (
+        "No : ABC/P/1/2031 Perihal : Penawaran Server Rekaan Lampiran : Spesifikasi "
+        "Kepada Yth : PT. Contoh Makmur\n\nDengan surat ini kami menawarkan server rekaan.\n"
+    )
+    hints = ContextAnalyzer().get_entity_hints(md)
+    assert hints["Nama Pekerjaan"] == "Penawaran Server Rekaan"
+
+
+def test_hint_perihal_label_kop_bertumpuk_tidak_dijadikan_judul():
+    """
+    Regresi Nota Pesanan (7 Okt 2026): OCR menulis label "Perihal" dan "Lampiran" bertumpuk,
+    lalu isinya di baris berikut. Pola perihal dulu menelan semuanya jadi "Lampiran Nota
+    Pesanan ... 1 (satu) berkas Dengan hormat". Judul diambil dari rujukan "perihal ...
+    tanggal ..." di badan surat, berhenti sebelum tanggal.
+    """
+    md = (
+        "Perihal\n"
+        "Lampiran Nota Pesanan Pengadaan Lisensi Contoh untuk Dinas Rekaan Tahun 2031\n"
+        "1 (satu) berkas\n"
+        "Dengan hormat,\n\n"
+        "1. Surat Kesanggupan dari PT Contoh Makmur perihal Pengadaan Lisensi Contoh untuk "
+        "Dinas Rekaan Tahun 2031 tanggal 5 Maret 2031.\n"
+        "2. Perjanjian Kerjasama antara Dinas Rekaan dengan PT Contoh Makmur.\n"
+    )
+    hints = ContextAnalyzer().get_entity_hints(md)
+    assert hints["Nama Pekerjaan"] == "Pengadaan Lisensi Contoh untuk Dinas Rekaan Tahun 2031"
+
+
+def test_hint_tentang_judul_dua_baris_tetap_utuh():
+    md = (
+        "## PT CONTOH MAKMUR TENTANG\n\n"
+        "PENGADAAN LISENSI CONTOH UNTUK\nDINAS REKAAN TAHUN 2031\n\n"
+        "## Nomor: K.TEL.000/HK.810/2031\n\n"
+        "sepanjang tidak bertentangan dengan ketentuan.\n"
+    )
+    hints = ContextAnalyzer().get_entity_hints(md)
+    assert hints["Nama Pekerjaan"] == "PENGADAAN LISENSI CONTOH UNTUK DINAS REKAAN TAHUN 2031"
+
+
 def test_labeled_party_blocks():
     md = (
         "maka kami yang bertanda tangan dibawah ini :\nNama : Rina Kartika\nJabatan : Kepala "

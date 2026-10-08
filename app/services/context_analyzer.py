@@ -263,7 +263,13 @@ class ContextAnalyzer:
         job_patterns = [
             r"Nama\s+Pekerjaan\s*:?\s*([^\n]+)",
             r"memberi\s+perintah\s+kerja\s+([\s\S]+?)\s+(?:kepada\s*:|dengan\s+uraian|\s+sesuai)",
-            r"(?:tentang|perihal|mengenai)\s+([\s\S]+?)(?:\s+maka\s+kami|\s+antara|\s+nomor|\n\n|$)",
+            # Berhenti di label kop berikutnya ("Lampiran :", "Kepada Yth", "Dengan hormat")
+            # dan di "tanggal <angka>" pada rujukan surat. Isian yang diawali label kop
+            # berarti OCR menumpuk kolom label ("Perihal\nLampiran ..."); tangkapan itu
+            # dilewati dan pencarian lanjut ke "perihal" berikutnya.
+            r"\b(?:tentang|perihal|mengenai)(?:\s*:)?\s+(?!(?:lampiran|kepada|yth)\b)([\s\S]+?)"
+            r"(?:\s+maka\s+kami|\s+antara|\s+nomor|\s+tanggal\s+\d|\s+(?:lampiran|kepada|yth)\s*:"
+            r"|\n\s*(?:lampiran|kepada|yth|dengan\s+hormat)\b|\n\n|$)",
             r"Jumlah\s+harga\s+untuk\s+([\s\S]+?)\s+sebesar\s+Rp",
             r"(?:^|\n)\s*Lampiran\s*(?:SPK)?\s*:\s*([^\n]+)",
             r"##\s*1\.\s*LINGKUP\s+PEKERJAAN[\s\S]*?(?:memberi\s+perintah\s+kerja|melaksanakan|pekerjaan)\s+([\s\S]+?)\s+(?:dengan|sesuai|yang\s+diminta)",
