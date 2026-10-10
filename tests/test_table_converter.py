@@ -10,7 +10,6 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.parsers.table_converter import (
-    clean_table_cells,
     html_table_to_markdown,
     html_table_to_rows,
     rows_to_markdown_table,
@@ -136,18 +135,6 @@ class TestHTMLTableToMarkdown:
         assert "Revenue" in md
         assert "57,006" in md
         assert "Gross profit" in md
-
-
-class TestCleanTableCells:
-    def test_trims_whitespace(self):
-        rows = [["  hello  ", "  world  "]]
-        cleaned = clean_table_cells(rows)
-        assert cleaned[0] == ["hello", "world"]
-
-    def test_collapses_spaces(self):
-        rows = [["hello   world"]]
-        cleaned = clean_table_cells(rows)
-        assert cleaned[0] == ["hello world"]
 
 
 if __name__ == "__main__":

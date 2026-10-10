@@ -7,50 +7,14 @@ Modul preprocessing citra dokumen scanned & image-based PDF:
 4. Edge & Character Sharpening (Unsharp Masking untuk ketajaman angka & teks halus)
 5. High-Resolution 300 DPI Rendering
 """
+
 import math
-from typing import Dict, Any, Optional, Union
 
 import cv2
 import numpy as np
 import pymupdf as fitz
-from PIL import Image
 
 from app.logger import logger
-
-
-def assess_image_quality(image: np.ndarray) -> Dict[str, Any]:
-    """
-    Menilai kualitas citra dokumen:
-    - sharpness: Laplacian variance (semakin tinggi semakin tajam, <100 biasanya blur)
-    - contrast: Standard deviation intensitas grayscale
-    - brightness: Mean intensitas grayscale
-    - skew_angle: Estimasi sudut kemiringan (derajat)
-    """
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image.copy()
-
-    # 1. Sharpness (Laplacian variance)
-    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-    sharpness = float(laplacian.var())
-
-    # 2. Contrast & Brightness
-    brightness = float(np.mean(gray))
-    contrast = float(np.std(gray))
-
-    # 3. Skew Angle Estimation
-    skew_angle = estimate_skew_angle(gray)
-
-    return {
-        "sharpness": round(sharpness, 2),
-        "brightness": round(brightness, 2),
-        "contrast": round(contrast, 2),
-        "skew_angle": round(skew_angle, 2),
-        "is_blurry": sharpness < 120.0,
-        "is_low_contrast": contrast < 40.0,
-        "needs_deskew": abs(skew_angle) > 0.5
-    }
 
 
 def _normalize_angle(angle: float) -> float:
@@ -78,7 +42,9 @@ def estimate_skew_angle(gray_img: np.ndarray) -> float:
         dilated = cv2.dilate(thresh, kernel, iterations=1)
 
         # Deteksi garis dengan HoughLinesP
-        lines = cv2.HoughLinesP(dilated, 1, np.pi / 180, threshold=100, minLineLength=100, maxLineGap=20)
+        lines = cv2.HoughLinesP(
+            dilated, 1, np.pi / 180, threshold=100, minLineLength=100, maxLineGap=20
+        )
 
         angles = []
         if lines is not None:
@@ -115,14 +81,11 @@ def estimate_skew_angle(gray_img: np.ndarray) -> float:
     return 0.0
 
 
-def deskew_image(image: np.ndarray, angle: Optional[float] = None) -> np.ndarray:
+def deskew_image(image: np.ndarray, angle: float | None = None) -> np.ndarray:
     """
     Merotasi citra untuk mengoreksi kemiringan dokumen.
     """
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
 
     if angle is None:
         angle = estimate_skew_angle(gray)
@@ -133,24 +96,24 @@ def deskew_image(image: np.ndarray, angle: Optional[float] = None) -> np.ndarray
     (h, w) = image.shape[:2]
     center = (w // 2, h // 2)
     rot_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-    
+
     # Hitung ukuran bounding baru agar tidak ada bagian dokumen yang terpotong
     cos = np.abs(rot_matrix[0, 0])
     sin = np.abs(rot_matrix[0, 1])
     new_w = int((h * sin) + (w * cos))
     new_h = int((h * cos) + (w * sin))
-    
+
     rot_matrix[0, 2] += (new_w / 2) - center[0]
     rot_matrix[1, 2] += (new_h / 2) - center[1]
-    
+
     # Putar dengan background putih
     deskewed = cv2.warpAffine(
-        image, 
-        rot_matrix, 
-        (new_w, new_h), 
-        flags=cv2.INTER_CUBIC, 
-        borderMode=cv2.BORDER_CONSTANT, 
-        borderValue=(255, 255, 255) if len(image.shape) == 3 else 255
+        image,
+        rot_matrix,
+        (new_w, new_h),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(255, 255, 255) if len(image.shape) == 3 else 255,
     )
     return deskewed
 
@@ -176,10 +139,10 @@ def enhance_contrast_and_lighting(image: np.ndarray) -> np.ndarray:
     if kernel_size % 2 == 0:
         kernel_size += 1
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-    
+
     # Estimasi background
     background = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
-    
+
     # Division normalization: (gray / background) * 255
     normalized = np.float32(gray) / (np.float32(background) + 1e-5)
     normalized = np.clip(normalized * 255, 0, 255).astype(np.uint8)
@@ -201,56 +164,34 @@ def sharpen_and_denoise(image: np.ndarray) -> np.ndarray:
     """
     # 1. Denoise lembut (Gaussian blur ringan)
     gaussian = cv2.GaussianBlur(image, (0, 0), 1.2)
-    
+
     # 2. Unsharp masking formula: image * 1.5 - gaussian * 0.5
     sharpened = cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 
-def preprocess_image_for_ocr(
-    image: Union[np.ndarray, Image.Image],
-    auto_deskew: bool = True,
-    auto_contrast: bool = True,
-    auto_sharpen: bool = True
-) -> np.ndarray:
+def preprocess_image_for_ocr(image: np.ndarray) -> np.ndarray:
     """
-    Pipeline lengkap peningkatan kualitas citra untuk OCR:
-    Input: numpy array (BGR/Gray) atau PIL Image
-    Output: numpy array BGR siap untuk Docling / PaddleOCR
+    Pipeline lengkap peningkatan kualitas citra untuk OCR: lurus -> kontras -> tajam.
+    Input: numpy array (BGR/Gray). Output: numpy array BGR siap untuk PaddleOCR.
     """
-    # Convert PIL to cv2 BGR if needed
-    if isinstance(image, Image.Image):
-        img_np = np.array(image)
-        if len(img_np.shape) == 3 and img_np.shape[2] == 3:
-            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-        elif len(img_np.shape) == 3 and img_np.shape[2] == 4:
-            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
-        else:
-            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
-    else:
-        img_bgr = image.copy()
-        if len(img_bgr.shape) == 2:
-            img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
+    img_bgr = image.copy()
+    if len(img_bgr.shape) == 2:
+        img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
 
-    # 1. Deskew
-    if auto_deskew:
-        # Langsung estimate_skew_angle, bukan assess_image_quality: metrik kualitas lainnya tidak
-        # dipakai di sini dan hanya menambah kerja di setiap halaman.
-        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-        skew_angle = estimate_skew_angle(gray)
-        if abs(skew_angle) > 0.5:
-            logger.info(f"📐 Melakukan auto-deskew citra: {round(skew_angle, 2)}°")
-            img_bgr = deskew_image(img_bgr, angle=skew_angle)
+    # 1. Deskew. Langsung estimate_skew_angle: metrik kualitas lain tidak dipakai di sini
+    # dan hanya menambah kerja di setiap halaman.
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    skew_angle = estimate_skew_angle(gray)
+    if abs(skew_angle) > 0.5:
+        logger.info(f"📐 Melakukan auto-deskew citra: {round(skew_angle, 2)}°")
+        img_bgr = deskew_image(img_bgr, angle=skew_angle)
 
     # 2. Shadow removal & Contrast enhancement
-    if auto_contrast:
-        img_bgr = enhance_contrast_and_lighting(img_bgr)
+    img_bgr = enhance_contrast_and_lighting(img_bgr)
 
     # 3. Sharpening & Denoise
-    if auto_sharpen:
-        img_bgr = sharpen_and_denoise(img_bgr)
-
-    return img_bgr
+    return sharpen_and_denoise(img_bgr)
 
 
 def render_pdf_page_high_res(page: fitz.Page, target_dpi: int = 300) -> np.ndarray:
@@ -275,5 +216,5 @@ def pixmap_to_bgr(pix) -> np.ndarray:
         img_bgr = cv2.cvtColor(img_data, cv2.COLOR_RGBA2BGR)
     else:
         img_bgr = img_data
-        
+
     return img_bgr

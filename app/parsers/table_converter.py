@@ -404,16 +404,3 @@ def format_structured_tabular_boxes(boxes: list[Any], y_tol: float = 14) -> str:
         return "\n\n".join(parts)
 
     return "\n".join(" ".join(b.text for b in r) for r in rows)
-
-
-def clean_table_cells(rows: list[list[str]]) -> list[list[str]]:
-    """Membersihkan sel tabel dari spasi berlebih."""
-    cleaned = []
-    for row in rows:
-        cleaned_row = []
-        for cell in row:
-            cell = cell.strip()
-            cell = re.sub(r"\s+", " ", cell)
-            cleaned_row.append(cell)
-        cleaned.append(cleaned_row)
-    return cleaned

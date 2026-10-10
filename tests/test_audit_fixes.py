@@ -957,3 +957,84 @@ def test_classifier_detects_spmk_as_contract_family():
     )
     doc_type, conf = DocumentClassifier().classify_fast_rule(text)
     assert doc_type == "contract" and conf >= 0.95
+
+
+# Pemilihan mesin OCR di engine.parse. PaddleOCR adalah PILIHAN, bukan cadangan: dulu galat
+# Docling apa pun -- termasuk nama mesin yang salah ketik -- diam-diam dialihkan ke
+# PaddleOCR, sehingga hasilnya datang dari mesin yang tidak diminta (dan di Mac memakan
+# ~30 detik per halaman).
+
+
+class _ParserTiruan:
+    def __init__(self, mesin: str, galat: Exception | None = None):
+        self.mesin, self.galat, self.panggilan = mesin, galat, []
+
+    def parse(self, pdf_path, **kwargs):
+        from app.schemas.common import DocumentStructure, LandingAIParsedResponse, ParseMetadata
+
+        self.panggilan.append(kwargs)
+        if self.galat:
+            raise self.galat
+        return LandingAIParsedResponse(
+            markdown="isi dokumen",
+            metadata=ParseMetadata(
+                job_id="tiruan", page_count=1, output_markdown_chars=11, parser_engine=self.mesin
+            ),
+            structure=DocumentStructure(),
+        )
+
+
+@pytest.fixture
+def engine_bertiruan(tmp_path, monkeypatch):
+    """-> (engine, path_pdf, docling_tiruan, paddle_tiruan), tanpa OCR atau LLM sungguhan."""
+    from app.services import engine as modul
+
+    def _buat(docling_galat: Exception | None = None):
+        monkeypatch.setattr(modul.config, "ENABLE_LLM_MARKDOWN_REFINER", False)
+        pdf = tmp_path / "dokumen.pdf"
+        pdf.write_bytes(b"%PDF-1.4")
+        mesin = modul.OpenADEEngine()
+        mesin._docling = _ParserTiruan("docling", docling_galat)
+        mesin._paddle = _ParserTiruan("paddle")
+        return mesin, str(pdf), mesin._docling, mesin._paddle
+
+    return _buat
+
+
+def test_docling_gagal_tidak_dialihkan_diam_diam_ke_paddle(engine_bertiruan):
+    from app.services.engine import ParsingError
+
+    mesin, pdf, _docling, paddle = engine_bertiruan(RuntimeError("OCR_ENGINE='mac' tidak bisa"))
+    with pytest.raises(ParsingError, match="tidak bisa"):
+        mesin.parse(pdf, ocr="mac")
+    assert paddle.panggilan == []
+
+
+def test_ocr_paddle_eksplisit_memakai_parser_paddle(engine_bertiruan):
+    mesin, pdf, docling, paddle = engine_bertiruan()
+    assert mesin.parse(pdf, ocr="paddle").metadata.parser_engine == "paddle"
+    assert len(paddle.panggilan) == 1 and docling.panggilan == []
+
+
+def test_env_ocr_engine_paddle_memilih_paddle(engine_bertiruan, monkeypatch):
+    from app.services import engine as modul
+
+    mesin, pdf, docling, paddle = engine_bertiruan()
+    monkeypatch.setattr(modul.config, "OCR_ENGINE", "paddle")
+    assert mesin.parse(pdf).metadata.parser_engine == "paddle"
+    assert docling.panggilan == []
+
+
+@pytest.mark.parametrize("diminta,diteruskan", [("mac", "mac"), ("RapidOCR", "rapidocr")])
+def test_mesin_selain_paddle_diteruskan_ke_docling(engine_bertiruan, diminta, diteruskan):
+    mesin, pdf, docling, paddle = engine_bertiruan()
+    mesin.parse(pdf, ocr=diminta)
+    assert docling.panggilan[0]["ocr_engine"] == diteruskan
+    assert paddle.panggilan == []
+
+
+def test_ocr_auto_memakai_mesin_bawaan_server(engine_bertiruan):
+    """ocr="auto" dari pemanggil API = "terserah server": Docling membaca config.OCR_ENGINE."""
+    mesin, pdf, docling, _paddle = engine_bertiruan()
+    mesin.parse(pdf, ocr="auto")
+    assert docling.panggilan[0]["ocr_engine"] is None
