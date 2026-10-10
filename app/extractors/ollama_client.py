@@ -30,6 +30,7 @@ from app.extractors.llm_output import (  # noqa: F401 -- konstanta diekspor ulan
     RUNAWAY_DIGITS,
     TEXT_MAX_CHARS,
     cap_string_lengths,
+    clear_numeric_placeholders,
     empty_result,
     is_empty,
     is_placeholder,
@@ -523,6 +524,7 @@ class OllamaExtractor:
         self._doc_text, self._system_prompt = doc_text, system_prompt
 
         logger.info(f"Extraction pass 1 [{self.model_name}] (num_ctx={config.OLLAMA_NUM_CTX})...")
+        started_empty = False
         try:
             extracted = self._extract_with_llm(
                 system_prompt,
@@ -540,6 +542,7 @@ class OllamaExtractor:
                 f"lanjut dari hasil kosong lewat targeted scan & retry per field."
             )
             extracted = self._empty_result(schema_class)
+            started_empty = True
         data = extracted.model_dump(by_alias=True)
         total, nulls, null_names = self._count_null_fields(data)
         logger.info(f"Pass 1: {total - nulls}/{total} field terisi")
@@ -580,6 +583,8 @@ class OllamaExtractor:
         if fallback_updates:
             _apply(fallback_updates, "context hints fallback")
 
+        if started_empty:
+            clear_numeric_placeholders(extracted)
         return extracted
 
     _reconcile_items = staticmethod(reconcile_items)
