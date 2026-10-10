@@ -523,7 +523,7 @@ def test_judul_kolom_yang_menyambung_tetap_dikenali_sebagai_harga():
 
 
 def test_singkatan_berhuruf_campur_tidak_ikut_dipecah():
-    """"UoM" harus tetap terbaca sebagai satuan, bukan dipecah menjadi "Uo M"."""
+    """ "UoM" harus tetap terbaca sebagai satuan, bukan dipecah menjadi "Uo M"."""
     kolom = detect_item_columns(["No", "Deskripsi", "Qty", "UoM", "JmlHarga"])
     assert kolom["unit"] == "UoM"
     assert kolom["total"] == ["JmlHarga"]

@@ -11,7 +11,11 @@ Rantai kegagalan yang dijaga tes ini:
 from types import SimpleNamespace
 
 from app.extractors.ollama_client import OllamaExtractor
-from app.extractors.reconcile import fill_terbilang_from_text
+from app.extractors.reconcile import (
+    drop_unwritten_sph_totals,
+    fill_terbilang_from_text,
+    sanitize_sph_totals,
+)
 from app.parsers.block_grouper import DraftBlock, merge_adjacent_blocks
 from app.schemas.evidence import FieldStatus
 from app.schemas.sph import SPHExtractionSchema
@@ -82,7 +86,7 @@ def test_guard_mengosongkan_bukan_menghitung_ulang():
         ppn_nominal=5_243_916_533.2184,
         grand_total=5_243_916_533.2184,
     )
-    OllamaExtractor._sanitize_sph_totals(ext)
+    sanitize_sph_totals(ext)
     assert ext.ppn_nominal is None
     assert ext.grand_total is None
 
@@ -94,7 +98,7 @@ def test_guard_membiarkan_nilai_wajar():
         ppn_nominal=52_437_916.0,
         grand_total=533_218_400.0,
     )
-    OllamaExtractor._sanitize_sph_totals(ext)
+    sanitize_sph_totals(ext)
     assert ext.ppn_nominal == 52_437_916.0
     assert ext.grand_total == 533_218_400.0
 
@@ -154,7 +158,7 @@ def test_subtotal_llm_yang_tidak_tertulis_di_dokumen_dikosongkan():
         "| Jumlah Setelah PPN | 14.250.000 |\n"
     )
     ext = SimpleNamespace(subtotal=12_800_000.0, ppn_nominal=None, grand_total=14_250_000.0)
-    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    drop_unwritten_sph_totals(ext, md)
     assert ext.subtotal is None
     assert ext.grand_total == 14_250_000.0
 
@@ -162,7 +166,7 @@ def test_subtotal_llm_yang_tidak_tertulis_di_dokumen_dikosongkan():
 def test_nominal_yang_hanya_tertulis_sebagai_terbilang_dibiarkan():
     md = "Total penawaran (Empat Belas Juta Dua Ratus Lima Puluh Ribu Rupiah)."
     ext = SimpleNamespace(subtotal=None, ppn_nominal=None, grand_total=14_250_000.0)
-    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    drop_unwritten_sph_totals(ext, md)
     assert ext.grand_total == 14_250_000.0
 
 
@@ -171,7 +175,7 @@ def test_nominal_tertulis_berformat_lain_dibiarkan():
     ext = SimpleNamespace(
         subtotal=519_600_000.0, ppn_nominal=52_437_916.0, grand_total=533_218_400.0
     )
-    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    drop_unwritten_sph_totals(ext, md)
     assert (ext.subtotal, ext.ppn_nominal, ext.grand_total) == (
         519_600_000.0,
         52_437_916.0,

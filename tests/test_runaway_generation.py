@@ -7,6 +7,12 @@ melempar ValidationError, dan dokumen 16 halaman gagal total setelah ±10 menit.
 """
 
 from app.extractors import ollama_client as oc
+from app.extractors.llm_output import (
+    cap_string_lengths,
+    empty_result,
+    slim_schema,
+    strip_runaway_digits,
+)
 from app.extractors.ollama_client import OllamaExtractor
 from app.schemas.contract import ContractExtractionSchema
 from app.schemas.sph import SPHExtractionSchema
@@ -18,12 +24,12 @@ TERPOTONG = (
 
 
 def _schema():
-    return OllamaExtractor._slim_schema(ContractExtractionSchema, oc.DETERMINISTIC_FIELDS)
+    return slim_schema(ContractExtractionSchema, oc.DETERMINISTIC_FIELDS)
 
 
 # lapis 1: batas panjang
 def test_semua_field_teks_diberi_batas_panjang():
-    capped = OllamaExtractor._cap_string_lengths(_schema())
+    capped = cap_string_lengths(_schema())
     tanpa_batas = []
 
     def walk(node, path):
@@ -41,7 +47,7 @@ def test_semua_field_teks_diberi_batas_panjang():
 
 
 def test_field_panjang_mendapat_batas_lebih_longgar():
-    capped = OllamaExtractor._cap_string_lengths(_schema())
+    capped = cap_string_lengths(_schema())
     alamat = capped["$defs"]["PihakDetail"]["properties"]["Alamat"]
     garansi = capped["properties"]["Garansi"]
 
@@ -57,7 +63,7 @@ def test_sisa_deret_angka_dibuang_dari_nilai():
         "Jalan Merpati Raya Nomor 1 Kelurahan Contoh Semarang, Indonesia, "
         "081234567890123456789012345678901234567890"
     )
-    bersih = OllamaExtractor._strip_runaway_digits({"Pihak Pertama": {"Alamat": alamat}})
+    bersih = strip_runaway_digits({"Pihak Pertama": {"Alamat": alamat}})
     assert (
         bersih["Pihak Pertama"]["Alamat"]
         == "Jalan Merpati Raya Nomor 1 Kelurahan Contoh Semarang, Indonesia"
@@ -72,12 +78,12 @@ def test_nomor_asli_tidak_ikut_dibuang():
         "NPWP": "12.345.678.9-012.345",
         "Nomor": "1234/ABC11/ABC-DEF/2026",
     }
-    assert OllamaExtractor._strip_runaway_digits(nilai) == nilai
+    assert strip_runaway_digits(nilai) == nilai
 
 
 # lapis 2: pass 1 rusak
 def test_hasil_kosong_tetap_lolos_validasi():
-    kosong = OllamaExtractor._empty_result(ContractExtractionSchema)
+    kosong = empty_result(ContractExtractionSchema)
     assert kosong.pihak_pertama is not None
     assert kosong.nomor_kontrak is None
 
@@ -108,7 +114,7 @@ def test_json_pass1_terpotong_tidak_menggagalkan_dokumen(monkeypatch):
 # ditolak skema, sehingga jaring pengaman di atas justru melempar galat kedua dan seluruh
 # SPH gagal setiap kali JSON pass 1 terpotong. Kontrak dan BAST tidak punya nominal wajib.
 def test_hasil_kosong_sph_tetap_lolos_validasi():
-    kosong = OllamaExtractor._empty_result(SPHExtractionSchema)
+    kosong = empty_result(SPHExtractionSchema)
     assert kosong.nomor_sph == ""
     assert not kosong.items
 

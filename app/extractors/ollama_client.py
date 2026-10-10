@@ -172,14 +172,6 @@ class OllamaExtractor:
             {"role": "user", "content": f"{doc_text}\n\n---\nTUGAS:\n{task}"},
         ]
 
-    _slim_schema = staticmethod(slim_schema)
-
-    _cap_string_lengths = staticmethod(cap_string_lengths)
-
-    _strip_runaway_digits = staticmethod(strip_runaway_digits)
-
-    _empty_result = staticmethod(empty_result)
-
     def _extract_with_llm(
         self,
         system_prompt: str,
@@ -189,15 +181,15 @@ class OllamaExtractor:
         drop_fields: tuple[str, ...] = (),
     ) -> BaseModel:
         fmt = (
-            self._slim_schema(schema_class, drop_fields)
+            slim_schema(schema_class, drop_fields)
             if drop_fields
             else schema_class.model_json_schema()
         )
-        fmt = self._cap_string_lengths(fmt)
+        fmt = cap_string_lengths(fmt)
         content = self._chat(self._doc_first_messages(system_prompt, doc_text, task), fmt=fmt)
         if RUNAWAY_DIGITS.search(content):
             try:
-                return schema_class.model_validate(self._strip_runaway_digits(json.loads(content)))
+                return schema_class.model_validate(strip_runaway_digits(json.loads(content)))
             except json.JSONDecodeError:
                 pass  # JSON terpotong: biarkan validasi di bawah melempar ValidationError
         return schema_class.model_validate_json(content)
@@ -248,10 +240,6 @@ class OllamaExtractor:
                 merged[key] = value
                 logger.info(f"  Filled: {key} = {str(value)[:80]}")
         return merged
-
-    _is_placeholder_value = staticmethod(is_placeholder)
-
-    _only_null_keys = staticmethod(only_null_keys)
 
     def _run_targeted_groups(
         self,
@@ -306,7 +294,7 @@ class OllamaExtractor:
         # Hanya minta field yang memang masih null. Tanpa filter ini, satu grup yang terpicu
         # menyeret seluruh field-nya (termasuk yang sudah terisi di pass 1) ke dalam output —
         # decode adalah biaya terbesar yang tersisa, jadi tiap token output harus dibayar.
-        templates = self._only_null_keys(templates, null_fields)
+        templates = only_null_keys(templates, null_fields)
         if not templates:
             return {}
 
@@ -541,7 +529,7 @@ class OllamaExtractor:
                 f"JSON pass 1 tidak valid ({e.errors()[0].get('type')}); "
                 f"lanjut dari hasil kosong lewat targeted scan & retry per field."
             )
-            extracted = self._empty_result(schema_class)
+            extracted = empty_result(schema_class)
             started_empty = True
         data = extracted.model_dump(by_alias=True)
         total, nulls, null_names = self._count_null_fields(data)
@@ -586,12 +574,6 @@ class OllamaExtractor:
         if started_empty:
             clear_numeric_placeholders(extracted)
         return extracted
-
-    _reconcile_items = staticmethod(reconcile_items)
-
-    _clean_and_number_items = staticmethod(clean_and_number_items)
-
-    _find_terbilang_in_text = staticmethod(find_terbilang_in_text)
 
     # item fallback
     def _fill_items_via_llm(
@@ -685,8 +667,6 @@ class OllamaExtractor:
                 setattr(extracted, attr, hints[hint_key])
                 logger.info(f"Fallback regex: {hint_key} = {hints[hint_key]}")
 
-    _prefer_confirmed_amount = staticmethod(prefer_confirmed_amount)
-
     def extract_contract(self, markdown_text: str) -> ContractExtractionSchema:
         extracted: ContractExtractionSchema = self._run_extraction(
             markdown_text,
@@ -699,7 +679,7 @@ class OllamaExtractor:
         )
 
         kelompok = extract_item_groups_from_markdown_tables(markdown_text, doc_type="contract")
-        extracted.items = self._reconcile_items(
+        extracted.items = reconcile_items(
             extracted.items,
             [i for g in kelompok for i in g],
             ItemBarangPekerjaan,
@@ -716,10 +696,10 @@ class OllamaExtractor:
                 "List Item/Barang",
                 ("Deskripsi", "Volume", "Harga Satuan", "Jumlah Harga"),
             )
-        extracted.items = self._clean_and_number_items(extracted.items, "deskripsi", "nomor_item")
+        extracted.items = clean_and_number_items(extracted.items, "deskripsi", "nomor_item")
         self._enrich_item_columns(extracted.items, "deskripsi")
 
-        self._prefer_confirmed_amount(extracted, "total_harga_pekerjaan", markdown_text)
+        prefer_confirmed_amount(extracted, "total_harga_pekerjaan", markdown_text)
 
         self._apply_hint_fallbacks(
             extracted,
@@ -766,8 +746,6 @@ class OllamaExtractor:
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None
         return extracted
-
-    _reconcile_bast_items = staticmethod(reconcile_bast_items)
 
     def _reconcile_parties(
         self, extracted: ContractExtractionSchema | BASTExtractionSchema, markdown_text: str
@@ -817,7 +795,7 @@ class OllamaExtractor:
             targeted_min_chars=1000,
         )
         kelompok = extract_item_groups_from_markdown_tables(markdown_text, doc_type="sph")
-        extracted.items = self._reconcile_items(
+        extracted.items = reconcile_items(
             extracted.items,
             [i for g in kelompok for i in g],
             SPHItemDetail,
@@ -834,15 +812,15 @@ class OllamaExtractor:
                 "Daftar Penawaran Harga",
                 ("Nama Item", "Qty", "Harga Satuan", "Total Harga"),
             )
-        extracted.items = self._clean_and_number_items(extracted.items, "nama_item", "nomor")
+        extracted.items = clean_and_number_items(extracted.items, "nama_item", "nomor")
         self._enrich_item_columns(extracted.items, "nama_item")
 
         # --- Sanity guard PPN & Grand Total ---
         # LLM kadang mengembalikan angka PPN / Grand Total yang absurd (mis. digit dua
         # angka tersambung). Nilai absurd DIKOSONGKAN, tidak dihitung ulang -- lihat
         # docstring _sanitize_sph_totals.
-        self._sanitize_sph_totals(extracted)
-        self._drop_unwritten_sph_totals(extracted, markdown_text)
+        sanitize_sph_totals(extracted)
+        drop_unwritten_sph_totals(extracted, markdown_text)
         # Setelah total dibersihkan: terbilang hanya dicocokkan dengan nominal yang lolos.
         fill_terbilang_from_text(
             extracted, markdown_text, (extracted.grand_total, extracted.subtotal)
@@ -851,10 +829,6 @@ class OllamaExtractor:
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None
         return extracted
-
-    _sanitize_sph_totals = staticmethod(sanitize_sph_totals)
-
-    _drop_unwritten_sph_totals = staticmethod(drop_unwritten_sph_totals)
 
     def extract_bast(self, markdown_text: str) -> BASTExtractionSchema:
         """
@@ -872,7 +846,7 @@ class OllamaExtractor:
             self._extract_targeted_clauses,
             targeted_min_chars=800,
         )
-        extracted.items = self._reconcile_bast_items(
+        extracted.items = reconcile_bast_items(
             extracted.items,
             extract_items_from_markdown_tables(markdown_text, doc_type="bast"),
         )
@@ -882,7 +856,7 @@ class OllamaExtractor:
                 "Daftar Barang/Pekerjaan Diserahkan",
                 ("Deskripsi", "Volume", "Satuan"),
             )
-        extracted.items = self._clean_and_number_items(extracted.items, "deskripsi", "nomor")
+        extracted.items = clean_and_number_items(extracted.items, "deskripsi", "nomor")
         self._reconcile_parties(extracted, markdown_text)
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None
