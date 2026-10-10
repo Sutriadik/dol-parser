@@ -46,10 +46,10 @@ def main() -> None:
 
     path = Path(sys.argv[1]).expanduser()
     if not path.exists():
-        print(f"❌ File tidak ditemukan: {path}")
+        print(f"File tidak ditemukan: {path}")
         sys.exit(1)
 
-    print(f"\n🚀 {path.name}")
+    print(f"\n{path.name}")
     print(
         f"   ocr={os.environ['OCR_ENGINE']}  model={os.environ['OLLAMA_MODEL']}  "
         f"num_ctx={os.environ['OLLAMA_NUM_CTX']}\n"
@@ -63,7 +63,7 @@ def main() -> None:
     timings = run_info.get("timings", {})
 
     print("\n" + "=" * 58)
-    print(f"🎉 SELESAI DALAM {elapsed:.1f} DETIK")
+    print(f"SELESAI DALAM {elapsed:.1f} DETIK")
     print("=" * 58)
     for stage in ("profile_s", "parse_s", "extract_s", "validate_and_ground_s"):
         if stage in timings:
@@ -75,13 +75,13 @@ def main() -> None:
             f"({run_info.get('llm_seconds', 0):.1f}s)"
         )
     print("-" * 58)
-    print(f"📄 Tipe        : {result['document_type'].upper()}")
-    print(f"📑 Markdown    : {result['files']['markdown']}")
-    print(f"📊 Parse JSON  : {result['files']['parse_json']}")
-    print(f"💎 Extract JSON: {result['files']['extract_json']}")
+    print(f"Tipe        : {result['document_type'].upper()}")
+    print(f"Markdown    : {result['files']['markdown']}")
+    print(f"Parse JSON  : {result['files']['parse_json']}")
+    print(f"Extract JSON: {result['files']['extract_json']}")
     nocodb = result["files"].get("nocodb_json")
     if nocodb:
-        print(f"🗄  NocoDB JSON : {nocodb}")
+        print(f"NocoDB JSON : {nocodb}")
     print("=" * 58 + "\n")
 
 

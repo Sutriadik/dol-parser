@@ -133,7 +133,7 @@ def strip_runaway_digits(data: Any) -> Any:
         return [strip_runaway_digits(v) for v in data]
     if isinstance(data, str) and RUNAWAY_DIGITS.search(data):
         cleaned = RUNAWAY_DIGITS.sub("", data).strip(" ,;-")
-        logger.warning(f"⚠️  Deret angka perulangan LLM dibuang: {data[:60]!r}...")
+        logger.warning(f"Deret angka perulangan LLM dibuang: {data[:60]!r}...")
         return cleaned or None
     return data
 

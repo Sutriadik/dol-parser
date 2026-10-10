@@ -98,7 +98,7 @@ class OpenADEEngine:
         try:
             return profile_document(pdf_path, max_pages=max_pages)
         except Exception as e:
-            logger.warning(f"⚠️  Profiling gagal ({e}); dokumen diperlakukan sebagai non-PDF")
+            logger.warning(f"Profiling gagal ({e}); dokumen diperlakukan sebagai non-PDF")
             return None
 
     def parse(
@@ -132,7 +132,7 @@ class OpenADEEngine:
         if profile is not None:
             needs_ocr = profile.needs_ocr
             logger.info(
-                f"📄 {path.name}: {profile.kind.upper()} ({profile.page_count} hlm, OCR hlm: "
+                f"{path.name}: {profile.kind.upper()} ({profile.page_count} hlm, OCR hlm: "
                 f"{profile.ocr_pages[:10] or '-'})"
             )
         else:
@@ -164,7 +164,7 @@ class OpenADEEngine:
                 parsed.metadata.output_markdown_chars = len(refined_md)
 
         logger.info(
-            f"✅ Parsing [{parsed.metadata.parser_engine}]: {parsed.metadata.page_count} hlm | "
+            f"Parsing [{parsed.metadata.parser_engine}]: {parsed.metadata.page_count} hlm | "
             f"{parsed.metadata.output_markdown_chars} karakter | {time.time() - started:.1f}s"
         )
         return parsed
@@ -193,7 +193,7 @@ class OpenADEEngine:
             classification = self.classifier.classify(markdown_text)
             resolved = classification.document_type
             logger.info(
-                f"🏷️  Auto-Classified: [{resolved.upper()}] ({classification.confidence * 100:.0f}%)"
+                f"Auto-Classified: [{resolved.upper()}] ({classification.confidence * 100:.0f}%)"
             )
 
         self.extractor.reset_stats()
@@ -206,13 +206,13 @@ class OpenADEEngine:
             else:
                 if resolved not in CONTRACT_TYPES:
                     logger.warning(
-                        f"⚠️  Belum ada schema untuk tipe '{resolved}', memakai schema kontrak"
+                        f"Belum ada schema untuk tipe '{resolved}', memakai schema kontrak"
                     )
                 extracted, resolved = self.extractor.extract_contract(markdown_text), "contract"
         except Exception as e:
             raise ExtractionError(f"Extraction gagal untuk tipe '{resolved}': {e}") from e
         logger.info(
-            f"✅ Extraction selesai ({time.time() - started:.1f}s, {self.extractor.llm_calls} LLM "
+            f"Extraction selesai ({time.time() - started:.1f}s, {self.extractor.llm_calls} LLM "
             "call)"
         )
         return extracted, resolved
@@ -252,17 +252,14 @@ class OpenADEEngine:
             "validation_issue_count": len(validation.issues),
             "requires_pm_confirmation": True,
         }
-        emoji = (
-            "🟢" if validation.status == "pass" else "🟡" if validation.status == "warn" else "🔴"
-        )
         logger.info(
-            f"\n{'=' * 60}\n📊 QUALITY REPORT\n{'=' * 60}\n"
+            f"\n{'=' * 60}\nQUALITY REPORT\n{'=' * 60}\n"
             f"  Fill rate      : {len(filled)}/{total} ({report['fill_rate']:.0%})\n"
             f"  Grounding rate : {len(grounded)}/{len(filled)} ({report['grounding_rate']:.0%})\n"
             f"  Status         : {dict(status_counts)}\n"
             f"  Tanpa bukti    : {len(report['unsupported_fields'])} field tidak ditemukan di "
             "dokumen\n"
-            f"  {emoji} Validation   : {validation.status} ({len(validation.issues)} "
+            f"  Validation     : {validation.status} ({len(validation.issues)} "
             f"issue)\n{'=' * 60}"
         )
         for issue in validation.issues:
@@ -341,7 +338,7 @@ class OpenADEEngine:
         extraction_md, duplicate_pages = drop_duplicate_copy(parsed.markdown)
         if duplicate_pages:
             logger.warning(
-                f"⚠️  Halaman {duplicate_pages[0]}-{duplicate_pages[-1]} adalah salinan "
+                f"Halaman {duplicate_pages[0]}-{duplicate_pages[-1]} adalah salinan "
                 f"ganda; hanya salinan pertama yang diekstrak."
             )
 
@@ -400,9 +397,9 @@ class OpenADEEngine:
         )
 
         logger.info(
-            f"\n🎉 Pipeline selesai dalam {timings['total_s']}s ({run_info['llm_calls']} LLM "
+            f"\nPipeline selesai dalam {timings['total_s']}s ({run_info['llm_calls']} LLM "
             "call)\n"
-            f"  📁 {parse_md_file}\n  📁 {parse_json_file}\n  📁 {extract_json_file}"
+            f"  {parse_md_file}\n  {parse_json_file}\n  {extract_json_file}"
         )
         return {
             "parsed": parsed,

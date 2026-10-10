@@ -76,7 +76,7 @@ def estimate_skew_angle(gray_img: np.ndarray) -> float:
 
     except Exception as e:
         # Bukan debug: kegagalan diam di sini membuat seluruh deskew mati tanpa ada yang tahu.
-        logger.warning(f"⚠️  Estimasi kemiringan gagal, deskew dilewati: {e}")
+        logger.warning(f"Estimasi kemiringan gagal, deskew dilewati: {e}")
 
     return 0.0
 
@@ -184,7 +184,7 @@ def preprocess_image_for_ocr(image: np.ndarray) -> np.ndarray:
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     skew_angle = estimate_skew_angle(gray)
     if abs(skew_angle) > 0.5:
-        logger.info(f"📐 Melakukan auto-deskew citra: {round(skew_angle, 2)}°")
+        logger.info(f"Melakukan auto-deskew citra: {round(skew_angle, 2)}°")
         img_bgr = deskew_image(img_bgr, angle=skew_angle)
 
     # 2. Shadow removal & Contrast enhancement

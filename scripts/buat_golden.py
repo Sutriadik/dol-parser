@@ -107,7 +107,7 @@ def main() -> int:
     sumber = config.EXTRACTION_OUTPUT_DIR / f"{stem}.extract.json"
     if not sumber.exists():
         print(
-            f"✗ Belum ada hasil ekstraksi: {sumber}\n"
+            f"Belum ada hasil ekstraksi: {sumber}\n"
             f'  Jalankan dulu:  .venv311/bin/python run.py "{args.dokumen}"',
             file=sys.stderr,
         )
@@ -133,7 +133,7 @@ def main() -> int:
     tujuan = tujuan_dir / f"{stem}.json"
     if tujuan.exists() and not args.timpa:
         print(
-            f"✗ Sudah ada: {tujuan}\n"
+            f"Sudah ada: {tujuan}\n"
             f"  Berkas ini mungkin memuat koreksi manual. Pakai --timpa kalau memang mau diganti.",
             file=sys.stderr,
         )
@@ -156,7 +156,7 @@ def main() -> int:
     }
     tujuan.write_text(json.dumps(golden, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    print(f"✓ Rangka golden ditulis: {tujuan}")
+    print(f"Rangka golden ditulis: {tujuan}")
     print(f"  tipe dokumen    : {doc_type}")
     print(
         "  field terisi    : "

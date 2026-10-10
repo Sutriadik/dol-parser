@@ -249,15 +249,15 @@ def bandingkan_laporan(lama: dict[str, Any], baru: dict[str, Any]) -> dict[str, 
 
 
 def _cetak_banding(beda: dict[str, Any], nama_lama: str) -> None:
-    print(f"\n🔀 BANDING dengan {nama_lama}")
+    print(f"\nBANDING dengan {nama_lama}")
     for judul, kunci in (
-        ("📉 Turun", "turun"),
-        ("📈 Naik", "naik"),
-        ("⚠️  Nilai salah yang BARU lolos sebagai bukti kuat/cukup", "lolos_salah_baru"),
+        ("Turun", "turun"),
+        ("Naik", "naik"),
+        ("Nilai salah yang BARU lolos sebagai bukti kuat/cukup", "lolos_salah_baru"),
     ):
         print(f"   {judul}: {len(beda[kunci])}")
         for c in beda[kunci]:
-            flag = "❗" if c["critical"] else "  "
+            flag = "! " if c["critical"] else "  "
             print(
                 f"     {flag}{c['document']} | {c['field']}: {c['sebelum']} -> {c['sesudah']} "
                 f"(expected={str(c['expected'])[:40]!r} got={str(c['predicted'])[:40]!r})"
@@ -296,13 +296,13 @@ def main() -> int:
             belum_dikoreksi.append(golden_path.name)
         pred_path = pred_dir / f"{Path(golden['document']).stem}.extract.json"
         if not pred_path.exists():
-            print(f"⚠️  Prediksi tidak ditemukan: {pred_path}")
+            print(f"Prediksi tidak ditemukan: {pred_path}")
             continue
         result = evaluate_document(golden, json.loads(pred_path.read_text(encoding="utf-8")))
         result["golden_terverifikasi"] = not golden.get("belum_dikoreksi")
         results.append(result)
 
-        print(f"\n📄 {result['document']}")
+        print(f"\n{result['document']}")
         print(
             f"   accuracy exact={result['accuracy_exact']}  lenient={result['accuracy_lenient']}  "
             f"critical={result['critical_accuracy_lenient']}  missing={result['missing']}  "
@@ -312,7 +312,7 @@ def main() -> int:
         )
         for row in result["rows"]:
             if args.verbose or row["verdict"] in ("wrong", "missing", "spurious"):
-                flag = "❗" if row["critical"] else "  "
+                flag = "! " if row["critical"] else "  "
                 print(
                     f"   {flag}[{row['verdict']:<8}] {row['field']}: "
                     f"expected={str(row['expected'])[:60]!r} got={str(row['predicted'])[:60]!r}"
@@ -320,7 +320,7 @@ def main() -> int:
 
     if belum_dikoreksi:
         print(
-            f"\n⚠️  {len(belum_dikoreksi)} berkas golden MASIH RANGKA OTOMATIS, nilainya belum "
+            f"\n{len(belum_dikoreksi)} berkas golden MASIH RANGKA OTOMATIS, nilainya belum "
             f"dikoreksi manual:"
         )
         for nama in belum_dikoreksi:
@@ -341,7 +341,7 @@ def main() -> int:
             "golden_belum_dikoreksi": belum_dikoreksi,
         }
     )
-    print(f"\n📊 SUMMARY {summary}")
+    print(f"\nSUMMARY {summary}")
 
     if args.label:
         REPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -361,7 +361,7 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
-        print(f"💾 Report disimpan: {out}")
+        print(f"Report disimpan: {out}")
 
     if args.banding:
         lama = json.loads(Path(args.banding).read_text(encoding="utf-8"))

@@ -33,7 +33,7 @@ def cmd_ddl(write: bool) -> int:
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         path = OUT_DIR / "schema.sql"
         path.write_text(ddl, encoding="utf-8")
-        print(f"✅ {path}  ({len(ddl.splitlines())} baris)")
+        print(f"{path}  ({len(ddl.splitlines())} baris)")
     else:
         print(ddl)
     return 0
@@ -67,7 +67,7 @@ def cmd_map(path: Path, pdf: str | None = None) -> int:
     result = json.loads(path.read_text(encoding="utf-8"))
     catatan = payload_note(result.get("document_type"))
     if catatan:
-        print(f"❌ {path.name}: {catatan}")
+        print(f"{path.name}: {catatan}")
         return 1
     md = ROOT / "storage" / "outputs" / "parsing" / path.name.replace(".extract.json", ".parse.md")
     if md.exists() and not result.get("markdown"):
@@ -77,7 +77,7 @@ def cmd_map(path: Path, pdf: str | None = None) -> int:
     try:
         payload = build_companion_payload(result, src)
     except ValueError as e:
-        print(f"❌ {e}")
+        print(f"Galat: {e}")
         return 1
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -87,12 +87,12 @@ def cmd_map(path: Path, pdf: str | None = None) -> int:
     print(f"  kunci dokumen : {payload['document'][0]['content_hash']}")
     for t, rows in payload.items():
         print(f"  {t:21} {len(rows):3d} baris")
-    print(f"\n✅ {out}")
+    print(f"\n{out}")
     problems = validate_payload(payload)
     print(
-        ("⚠️  " + str(len(problems)) + " masalah — jalankan --check untuk detail")
+        ("" + str(len(problems)) + " masalah — jalankan --check untuk detail")
         if problems
-        else "✅ payload lolos validasi"
+        else "payload lolos validasi"
     )
     return 0
 
@@ -102,9 +102,9 @@ def cmd_check(path: Path) -> int:
     problems = validate_payload(payload)
     if not problems:
         total = sum(len(v) for v in payload.values())
-        print(f"✅ {total} baris / {len(payload)} tabel — semua sesuai skema")
+        print(f"{total} baris / {len(payload)} tabel — semua sesuai skema")
         return 0
-    print(f"❌ {len(problems)} masalah:")
+    print(f"{len(problems)} masalah:")
     for p in problems:
         print(f"   {p}")
     return 1
@@ -121,7 +121,7 @@ def cmd_push(path: Path, dry_run: bool, allow_reviewed: bool) -> int:
         )
         hasil = pusher.push(payload, dry_run=dry_run, allow_reviewed=allow_reviewed)
     except CompanionPushError as e:
-        print(f"❌ {e}")
+        print(f"Galat: {e}")
         return 1
     if dry_run:
         print(f"RENCANA (tidak ada yang dikirim) — {config.NOCODB_URL}\n")
@@ -134,7 +134,7 @@ def cmd_push(path: Path, dry_run: bool, allow_reviewed: bool) -> int:
     for t, s in hasil["tables"].items():
         print(f"  {t:21} {s}")
     print(
-        f"\n✅ {hasil['inserted']} baris baru, {hasil['updated']} diperbarui, "
+        f"\n{hasil['inserted']} baris baru, {hasil['updated']} diperbarui, "
         f"{hasil['deleted']} baris basi dihapus"
     )
     return 0

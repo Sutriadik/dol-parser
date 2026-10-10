@@ -145,11 +145,9 @@ class PaddleOCRParser:
                 from app.parsers.layout_parser import LayoutParser
 
                 cls._layout_parser = LayoutParser()
-                logger.info("🏗️  Layout parser (PPStructure) loaded")
+                logger.info("Layout parser (PPStructure) loaded")
             except Exception as e:
-                logger.warning(
-                    f"⚠️  Layout parser tidak tersedia, fallback ke spatial clustering: {e}"
-                )
+                logger.warning(f"Layout parser tidak tersedia, fallback ke spatial clustering: {e}")
                 cls._layout_parser = False  # False = tried and failed
         return cls._layout_parser if cls._layout_parser is not False else None
 
@@ -218,9 +216,7 @@ class PaddleOCRParser:
         total_pages = len(doc)
         pages_to_process = min(total_pages, max_pages) if max_pages else total_pages
 
-        logger.info(
-            f"🏗️  PP-Structure Layout Mode: Memproses {pages_to_process}/{total_pages} halaman"
-        )
+        logger.info(f"PP-Structure Layout Mode: Memproses {pages_to_process}/{total_pages} halaman")
 
         for page_idx in range(pages_to_process):
             page = doc[page_idx]
@@ -336,7 +332,7 @@ class PaddleOCRParser:
         duration_ms = int((time.time() - start_time) * 1000)
 
         logger.info(
-            f"✅ PP-Structure selesai: {len(pages_structure)} halaman, {len(cleaned_markdown)} "
+            f"PP-Structure selesai: {len(pages_structure)} halaman, {len(cleaned_markdown)} "
             f"karakter, {duration_ms}ms"
         )
 
@@ -371,9 +367,7 @@ class PaddleOCRParser:
         total_pages = len(doc)
         pages_to_process = min(total_pages, max_pages) if max_pages else total_pages
 
-        logger.info(
-            f"🔍 PaddleOCR Fallback Mode: Memproses {pages_to_process}/{total_pages} halaman"
-        )
+        logger.info(f"PaddleOCR Fallback Mode: Memproses {pages_to_process}/{total_pages} halaman")
 
         for page_idx in range(pages_to_process):
             page = doc[page_idx]
@@ -485,7 +479,7 @@ class PaddleOCRParser:
         duration_ms = int((time.time() - start_time) * 1000)
 
         logger.info(
-            f"✅ PaddleOCR selesai: {len(pages_structure)} halaman, {len(cleaned_markdown)} "
+            f"PaddleOCR selesai: {len(pages_structure)} halaman, {len(cleaned_markdown)} "
             f"karakter, {duration_ms}ms"
         )
 
@@ -516,7 +510,7 @@ class PaddleOCRParser:
             try:
                 result = self._parse_with_layout(pdf_path, max_pages)
             except Exception as e:
-                logger.warning(f"⚠️  PP-Structure gagal, fallback ke PaddleOCR: {e}")
+                logger.warning(f"PP-Structure gagal, fallback ke PaddleOCR: {e}")
                 return self._parse_with_ocr(pdf_path, max_pages)
             # Halaman scan penuh sering dideteksi sebagai satu region "figure" sehingga teksnya
             # tidak pernah di-OCR (hasil hanya penanda [IMAGE]). Jika begitu, OCR ulang tanpa
@@ -524,7 +518,7 @@ class PaddleOCRParser:
             real_chars = len(re.sub(r"\[IMAGE[^\]]*\]|\s+", "", result.markdown))
             if real_chars < MIN_TEXT_CHARS_PER_PAGE * max(result.metadata.page_count, 1):
                 logger.warning(
-                    f"⚠️  PP-Structure hanya menghasilkan {real_chars} karakter teks "
+                    f"PP-Structure hanya menghasilkan {real_chars} karakter teks "
                     f"({result.metadata.page_count} hlm) → OCR ulang tanpa layout analysis"
                 )
                 return self._parse_with_ocr(pdf_path, max_pages)

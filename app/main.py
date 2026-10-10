@@ -68,7 +68,7 @@ def _hapus_unggahan_yatim() -> None:
     for p in yatim:
         shutil.rmtree(p, ignore_errors=True)
     if yatim:
-        logger.warning(f"🧹 {len(yatim)} unggahan dari job yang terputus restart dihapus.")
+        logger.warning(f"{len(yatim)} unggahan dari job yang terputus restart dihapus.")
 
 
 @asynccontextmanager
@@ -85,7 +85,7 @@ async def lifespan(_app: FastAPI):
     job_queue.start()
     if not config.API_KEY:
         logger.warning(
-            "⚠️  OPENADE_API_KEY kosong: API terbuka tanpa autentikasi. "
+            "OPENADE_API_KEY kosong: API terbuka tanpa autentikasi. "
             "Aman hanya selama service ini cuma dijangkau dari localhost."
         )
     yield
@@ -517,7 +517,7 @@ def _run_job_inti(job: Job) -> dict:
             sebab = e.detail if isinstance(e, HTTPException) else f"{type(e).__name__}: {e}"
             response["nocodb_push"] = {"error": sebab}
             job.nocodb_push = f"gagal: {sebab}"
-            logger.error(f"❌ Push NocoDB job {job.job_id} gagal: {sebab}")
+            logger.error(f"Push NocoDB job {job.job_id} gagal: {sebab}")
     return response
 
 

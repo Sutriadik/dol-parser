@@ -114,7 +114,7 @@ class OllamaExtractor:
         est_tokens = int(prompt_chars / CHARS_PER_TOKEN)
         if est_tokens > config.OLLAMA_NUM_CTX * 0.8:
             logger.warning(
-                f"⚠️  Prompt ~{est_tokens} token mendekati num_ctx={config.OLLAMA_NUM_CTX}; bagian awal bisa terpotong."
+                f"Prompt ~{est_tokens} token mendekati num_ctx={config.OLLAMA_NUM_CTX}; bagian awal bisa terpotong."
             )
         started = time.time()
         try:
@@ -149,7 +149,7 @@ class OllamaExtractor:
         )
         e_tok, e_ns = response.get("eval_count", 0), response.get("eval_duration", 0) or 1
         logger.info(
-            f"   ⏱  prefill {p_tok} tok/{p_ns / 1e9:.1f}s ({p_tok / (p_ns / 1e9):.0f} tok/s) · "
+            f"   prefill {p_tok} tok/{p_ns / 1e9:.1f}s ({p_tok / (p_ns / 1e9):.0f} tok/s) · "
             f"decode {e_tok} tok/{e_ns / 1e9:.1f}s ({e_tok / (e_ns / 1e9):.1f} tok/s) · total {elapsed:.1f}s"
         )
         return response["message"]["content"]
@@ -245,7 +245,7 @@ class OllamaExtractor:
                 merged[key] = self._merge_retry_result(merged[key], value)
             elif is_empty(merged.get(key)) and not is_empty(value):
                 merged[key] = value
-                logger.info(f"  🔄 Filled: {key} = {str(value)[:80]}")
+                logger.info(f"  Filled: {key} = {str(value)[:80]}")
         return merged
 
     _is_placeholder_value = staticmethod(is_placeholder)
@@ -452,7 +452,7 @@ class OllamaExtractor:
             return enriched_text
 
         logger.info(
-            f"📑 Dokumen tebal ({len(enriched_text)} karakter) → section & table preservation sampling"
+            f"Dokumen tebal ({len(enriched_text)} karakter) → section & table preservation sampling"
         )
         lines = enriched_text.splitlines()
         table_lines = [b for b in lines if b.strip().startswith("|") and b.strip().endswith("|")]
@@ -500,7 +500,7 @@ class OllamaExtractor:
         effective = "\n\n".join(p for p in parts if p.strip())
         if len(effective) > max_chars * 2:
             logger.warning(
-                f"⚠️  Teks efektif masih {len(effective)} karakter (tabel sangat besar); pertimbangkan ekstraksi tabel per halaman."
+                f"Teks efektif masih {len(effective)} karakter (tabel sangat besar); pertimbangkan ekstraksi tabel per halaman."
             )
         return effective
 
@@ -522,9 +522,7 @@ class OllamaExtractor:
         doc_text = f"Berikut teks dokumen {doc_label} hasil parsing:\n\n{effective_text}"
         self._doc_text, self._system_prompt = doc_text, system_prompt
 
-        logger.info(
-            f"🤖 Extraction pass 1 [{self.model_name}] (num_ctx={config.OLLAMA_NUM_CTX})..."
-        )
+        logger.info(f"Extraction pass 1 [{self.model_name}] (num_ctx={config.OLLAMA_NUM_CTX})...")
         try:
             extracted = self._extract_with_llm(
                 system_prompt,
@@ -538,13 +536,13 @@ class OllamaExtractor:
             # seluruh dokumen: mulai dari hasil kosong, lalu targeted scan dan retry per field
             # di bawah mengisi field yang kosong -- memang itu tugas keduanya.
             logger.warning(
-                f"⚠️  JSON pass 1 tidak valid ({e.errors()[0].get('type')}); "
+                f"JSON pass 1 tidak valid ({e.errors()[0].get('type')}); "
                 f"lanjut dari hasil kosong lewat targeted scan & retry per field."
             )
             extracted = self._empty_result(schema_class)
         data = extracted.model_dump(by_alias=True)
         total, nulls, null_names = self._count_null_fields(data)
-        logger.info(f"📊 Pass 1: {total - nulls}/{total} field terisi")
+        logger.info(f"Pass 1: {total - nulls}/{total} field terisi")
 
         def _apply(update: dict[str, Any], label: str) -> None:
             nonlocal extracted, data, total, nulls, null_names
@@ -557,16 +555,16 @@ class OllamaExtractor:
                 return
             data = extracted.model_dump(by_alias=True)
             total, nulls, null_names = self._count_null_fields(data)
-            logger.info(f"📊 Setelah {label}: {total - nulls}/{total} field terisi")
+            logger.info(f"Setelah {label}: {total - nulls}/{total} field terisi")
 
         if null_names and len(markdown_text) > targeted_min_chars:
-            logger.info(f"🎯 Targeted clause refinement untuk {len(null_names)} field null...")
+            logger.info(f"Targeted clause refinement untuk {len(null_names)} field null...")
             _apply(targeted(system_prompt, doc_text, null_names), "targeted scan")
 
         for attempt in range(config.MAX_EXTRACTION_RETRIES):
             if nulls / max(total, 1) <= config.NULL_FIELD_THRESHOLD:
                 break
-            logger.info(f"🔄 Retry {attempt + 1} (null ratio {nulls / max(total, 1):.0%})...")
+            logger.info(f"Retry {attempt + 1} (null ratio {nulls / max(total, 1):.0%})...")
             # Retry hanya meminta field yang masih kosong, bukan membangkitkan ulang seluruh
             # schema. Sebelumnya satu retry mengetik ulang ~2.300 token (termasuk tabel) hanya
             # untuk mengisi beberapa field.
@@ -601,7 +599,7 @@ class OllamaExtractor:
         """
         if not self._doc_text:
             return []
-        logger.info(f"📋 Tabel tidak terdeteksi parser → minta LLM menyusun '{alias}'...")
+        logger.info(f"Tabel tidak terdeteksi parser → minta LLM menyusun '{alias}'...")
         result = self._ask_json(
             self._system_prompt,
             self._doc_text,
@@ -622,7 +620,7 @@ class OllamaExtractor:
             except Exception as e:
                 logger.debug(f"Baris item dari LLM tidak valid, dilewati: {e}")
         if items:
-            logger.info(f"📋 {len(items)} item disusun oleh LLM (fallback)")
+            logger.info(f"{len(items)} item disusun oleh LLM (fallback)")
         return items
 
     OPTIONAL_ITEM_ATTRS = ("spesifikasi", "brand_merek", "nomor_part", "periode", "keterangan")
@@ -670,7 +668,7 @@ class OllamaExtractor:
                     filled += 1
         if filled:
             logger.info(
-                f"🧩 {filled} kolom opsional item dilengkapi LLM ({', '.join(alias_of.values())})"
+                f"{filled} kolom opsional item dilengkapi LLM ({', '.join(alias_of.values())})"
             )
 
     def _apply_hint_fallbacks(
@@ -680,7 +678,7 @@ class OllamaExtractor:
         for attr, hint_key in mapping.items():
             if is_placeholder(getattr(extracted, attr, None)) and hints.get(hint_key):
                 setattr(extracted, attr, hints[hint_key])
-                logger.info(f"📍 Fallback regex: {hint_key} = {hints[hint_key]}")
+                logger.info(f"Fallback regex: {hint_key} = {hints[hint_key]}")
 
     _prefer_confirmed_amount = staticmethod(prefer_confirmed_amount)
 
@@ -755,7 +753,7 @@ class OllamaExtractor:
         )
         if nomor_baru != extracted.nomor_kontrak:
             logger.info(
-                f"🔄 Dua nomor kontrak tertukar peran → dikoreksi dari penanda perusahaan: "
+                f"Dua nomor kontrak tertukar peran → dikoreksi dari penanda perusahaan: "
                 f"kontrak={nomor_baru}, internal={internal_baru}"
             )
             extracted.nomor_kontrak, extracted.nomor_kontrak_internal = nomor_baru, internal_baru
@@ -782,7 +780,7 @@ class OllamaExtractor:
             and p2_hint.get("alamat")
             and p1_hint["alamat"] != p2_hint["alamat"]
         ):
-            logger.info("🔧 Alamat pihak pertama & kedua identik → dikoreksi dari preamble")
+            logger.info("Alamat pihak pertama & kedua identik → dikoreksi dari preamble")
             p1.alamat, p2.alamat = p1_hint["alamat"], p2_hint["alamat"]
 
         c1, c2 = (
@@ -792,7 +790,7 @@ class OllamaExtractor:
         if c1 and c2:
             e1, e2 = p1.nama_perusahaan.strip().lower(), p2.nama_perusahaan.strip().lower()
             if (e1 == c2 and e2 == c1) or e1 == e2:
-                logger.info("🔄 Nama perusahaan pihak tertukar/identik → dikoreksi dari preamble")
+                logger.info("Nama perusahaan pihak tertukar/identik → dikoreksi dari preamble")
                 p1.nama_perusahaan, p2.nama_perusahaan = (
                     p1_hint["nama_perusahaan"],
                     p2_hint["nama_perusahaan"],
