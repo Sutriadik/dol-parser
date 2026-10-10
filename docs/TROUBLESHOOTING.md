@@ -200,6 +200,15 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 - **Perbaikan:** coba mesin OCR lain: `ocr=mac` (Apple Vision, macOS saja) atau
   `ocr=tesseract`. `make cek-ocr` menampilkan mesin yang tersedia.
 
+### `Docling gagal membaca … (ocr=…): …. Mesin lain tidak dicoba otomatis`
+
+- **Penyebab:** mesin OCR yang diminta tidak bisa dipakai (nama salah ketik, paket atau
+  biner belum terpasang), atau Docling gagal membuka berkasnya. Bagian setelah titik dua
+  adalah galat aslinya.
+- **Perbaikan:** betulkan nilai `OCR_ENGINE` / `ocr=`, atau minta mesin lain terang-terangan,
+  mis. `OCR_ENGINE=paddle .venv311/bin/python run.py "dokumen.pdf"`. Sistem sengaja tidak
+  beralih mesin sendiri: hasil dari mesin yang tidak diminta sulit dilacak.
+
 ### Validasi `fail` padahal nilainya terlihat benar
 
 - Periksa dulu dokumen aslinya. Contoh nyata (angka disamarkan): SPH PT Vendor A menulis

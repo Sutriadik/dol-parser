@@ -105,12 +105,11 @@ class OpenADEEngine:
         self,
         pdf_path: str,
         max_pages: int = None,
-        parser: str | None = None,
         profile: DocumentProfile | None = None,
         ocr: str | None = None,
     ) -> LandingAIParsedResponse:
         """
-        `ocr` adalah SATU tombol pemilihan mesin OCR, dipakai sebagai argumen Python biasa:
+        `ocr` adalah SATU tombol pemilihan mesin OCR; None = env `OCR_ENGINE`:
 
             engine.parse(pdf, ocr="rapidocr")   # default, lintas platform
             engine.parse(pdf, ocr="mac")        # Apple Vision, hanya macOS
@@ -118,10 +117,12 @@ class OpenADEEngine:
             engine.parse(pdf, ocr="paddle")     # PaddleOCR (jalur parser terpisah)
 
         Tiga nilai pertama berjalan di atas Docling (layout + TableFormer tetap dipakai);
-        "paddle" memakai jalur PP-Structure tersendiri. Sebelumnya pilihan ini terpecah di
-        dua knob (`parser=` dan env `OCR_ENGINE`) yang saling tumpang tindih -- mis.
-        parser="docling" + OCR_ENGINE="mac" -- sehingga sulit ditebak mana yang menang.
-        `parser=` dipertahankan untuk pemanggil lama; `ocr=` yang diutamakan.
+        "paddle" memakai jalur PP-Structure tersendiri.
+
+        Mesin yang jalan SELALU mesin yang diminta. Dulu galat Docling apa pun -- termasuk
+        nama mesin yang salah ketik -- diam-diam dialihkan ke PaddleOCR, jadi hasilnya bisa
+        datang dari mesin lain tanpa ada yang tahu. Sekarang galat itu dilempar; untuk
+        mencoba mesin lain, minta terang-terangan lewat `ocr=`.
         """
         path = Path(pdf_path)
         if not path.exists():
@@ -137,33 +138,23 @@ class OpenADEEngine:
         else:
             needs_ocr = path.suffix.lower() in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 
-        # `ocr=` menang atas `parser=`. "paddle" memilih jalur parser terpisah; nilai lain
-        # (rapidocr/mac/tesseract/auto) diteruskan ke Docling sebagai engine OCR-nya.
-        selected = (ocr or parser or config.OCR_ENGINE or config.DEFAULT_PARSER).lower()
-        choice = "paddle" if selected == "paddle" else ("auto" if selected == "auto" else "docling")
-        docling_ocr = None if selected in ("paddle", "docling", "auto") else selected
+        selected = (ocr or config.OCR_ENGINE).lower()
 
         started = time.time()
-        if choice == "paddle":
+        if selected == "paddle":
             parsed = self.paddle_parser.parse(pdf_path, max_pages=max_pages)
         else:
+            # "auto" dari pemanggil berarti "terserah server": Docling membaca OCR_ENGINE.
+            docling_ocr = None if selected == "auto" else selected
             try:
                 parsed = self.docling_parser.parse(
                     pdf_path, do_ocr=needs_ocr, max_pages=max_pages, ocr_engine=docling_ocr
                 )
             except Exception as e:
-                if not needs_ocr and choice == "auto":
-                    raise ParsingError(f"Docling parsing gagal: {e}") from e
-                logger.warning(f"⚠️  Docling gagal ({e}), fallback ke PaddleOCR...")
-                parsed = self.paddle_parser.parse(pdf_path, max_pages=max_pages)
-            else:
-                real_chars = len(re.sub(r"<!--.*?-->|\s+", "", parsed.markdown))
-                too_little = real_chars < MIN_CHARS_PER_PAGE_AFTER_OCR * max(
-                    parsed.metadata.page_count, 1
-                )
-                if choice == "auto" and needs_ocr and too_little:
-                    logger.info("ℹ️  Output OCR Docling terlalu sedikit → PaddleOCR")
-                    parsed = self.paddle_parser.parse(pdf_path, max_pages=max_pages)
+                raise ParsingError(
+                    f"Docling gagal membaca {path.name} (ocr={selected}): {e}. "
+                    'Mesin lain tidak dicoba otomatis; minta lewat ocr= (mis. "paddle").'
+                ) from e
 
         # Poles teks markdown (reparasi typo / teks rumpang OCR & format tabel LaTeX-grade)
         if config.ENABLE_LLM_MARKDOWN_REFINER:
@@ -190,7 +181,7 @@ class OpenADEEngine:
             raise ParsingError(
                 f"Teks hasil parsing terlalu sedikit ({real_chars} karakter untuk {pages} halaman, "
                 f"engine {parsed.metadata.parser_engine}). Ekstraksi LLM dibatalkan. "
-                f"Coba parser 'auto' atau 'docling', dan cek kualitas scan."
+                f"Cek kualitas scan, atau coba mesin OCR lain lewat ocr= (mac, tesseract, paddle)."
             )
 
     # stage 2: extract
@@ -305,7 +296,6 @@ class OpenADEEngine:
         doc_type: str = "auto",
         output_dir: str = None,
         max_pages: int = None,
-        parser: str | None = None,
         ocr: str | None = None,
     ) -> dict[str, Any]:
         """`ocr`: rapidocr | mac | tesseract | paddle | auto (lihat self.parse)."""
@@ -326,7 +316,7 @@ class OpenADEEngine:
         timings["profile_s"] = round(time.time() - t, 2)
 
         t = time.time()
-        parsed = self.parse(pdf_path, max_pages=max_pages, parser=parser, profile=profile, ocr=ocr)
+        parsed = self.parse(pdf_path, max_pages=max_pages, profile=profile, ocr=ocr)
         timings["parse_s"] = round(time.time() - t, 2)
         parse_md_file = parsing_dir / f"{path.stem}.parse.md"
         parse_json_file = parsing_dir / f"{path.stem}.parse.json"

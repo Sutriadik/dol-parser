@@ -40,14 +40,12 @@ class AppConfig(BaseModel):
     ENABLE_LLM_MARKDOWN_REFINER: bool = _env_bool("ENABLE_LLM_MARKDOWN_REFINER", True)
 
     # Parser settings
-    # docling (Apple Vision OCR di macOS) ~17 detik untuk 9 halaman scan; jalur paddle
-    # merender DAN meng-OCR tiap halaman dua kali (PaddleOCR lalu PP-Structure), jadi
-    # dipakai hanya sebagai fallback.
-    DEFAULT_PARSER: str = os.getenv("DEFAULT_PARSER", "docling")
     PARSER_NUM_THREADS: int = _env_int("PARSER_NUM_THREADS", max(1, (os.cpu_count() or 4) - 2))
     # Pemilihan mesin OCR: rapidocr | mac | tesseract | paddle | auto (atau engine.parse(pdf,
     # ocr=...)). Default rapidocr supaya akurasi yang diukur di laptop sama dengan server
-    # Linux/Windows; Apple Vision (mac) lebih cepat tapi hanya ada di macOS.
+    # Linux/Windows; Apple Vision (mac) lebih cepat tapi hanya ada di macOS. "paddle" memakai
+    # jalur PP-Structure tersendiri yang merender DAN meng-OCR tiap halaman dua kali, jadi
+    # hanya jalan bila diminta -- tidak pernah sebagai cadangan otomatis.
     OCR_ENGINE: str = os.getenv("OCR_ENGINE", "rapidocr")
     DEFAULT_DPI: int = 150
     OCR_LANG: str = os.getenv("OCR_LANG", "en")

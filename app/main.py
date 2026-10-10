@@ -3,7 +3,6 @@ import hmac
 import json
 import os
 import shutil
-import sys
 import threading
 import urllib.error
 import urllib.request
@@ -661,19 +660,10 @@ def list_jobs_endpoint(limit: int = 50, document_id: str = None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        target_pdf = sys.argv[1]
-        doc_type = sys.argv[2] if len(sys.argv) > 2 else "auto"
-        parser_engine = sys.argv[3] if len(sys.argv) > 3 else config.DEFAULT_PARSER
-        print(
-            f"🚀 Open ADE: {target_pdf} (Parser: {parser_engine.upper()}, Type: {doc_type.upper()})"
-        )
-        res = engine.process_full(target_pdf, doc_type=doc_type, parser=parser_engine)
-        print(json.dumps(res["extracted"].model_dump(by_alias=True), indent=2, ensure_ascii=False))
-    else:
-        uvicorn.run(
-            "app.main:app",
-            host="0.0.0.0",
-            port=8000,
-            reload=os.getenv("UVICORN_RELOAD", "0") == "1",
-        )
+    # Memproses satu dokumen dari terminal: pakai run.py, bukan berkas ini.
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=os.getenv("UVICORN_RELOAD", "0") == "1",
+    )

@@ -6,9 +6,9 @@ Open ADE — runner dokumen tunggal.
 
 Seluruh setup ada di blok SETUP di bawah, jadi tidak perlu lagi menulis variabel
 environment di terminal. Untuk sekali jalan, env dari shell tetap menang
-(os.environ.setdefault), misalnya:
+(os.environ.setdefault), misalnya memakai PaddleOCR untuk satu dokumen:
 
-    DEFAULT_PARSER=paddle .venv311/bin/python run.py "dokumen.pdf"
+    OCR_ENGINE=paddle .venv311/bin/python run.py "dokumen.pdf"
 """
 
 import os
@@ -22,9 +22,9 @@ from pathlib import Path
 SETUP = {
     # SATU tombol pemilihan mesin OCR. Default rapidocr supaya hasil di laptop sama dengan
     # hasil di server Linux/Windows -- Apple Vision ("mac") lebih cepat tapi hanya ada di
-    # macOS, jadi tidak layak jadi patokan pengukuran.
+    # macOS, jadi tidak layak jadi patokan pengukuran. Mesin lain hanya jalan bila diminta
+    # di sini atau lewat env; tidak ada pengalihan otomatis antar-mesin.
     "OCR_ENGINE": "rapidocr",  # rapidocr | mac | tesseract | paddle | auto
-    "DEFAULT_PARSER": "docling",  # dipertahankan untuk pemanggil lama; OCR_ENGINE menang
     "OLLAMA_MODEL": "qwen2.5:7b",
     "OLLAMA_NUM_CTX": "16384",  # samakan di seluruh pipeline, jangan diubah per tahap
     "OLLAMA_KEEP_ALIVE": "30m",  # model tetap di memori antar panggilan

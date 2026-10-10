@@ -237,6 +237,14 @@ Pilihan: `rapidocr` (default), `mac`, `tesseract`, `paddle`, `auto`.
 Default sengaja `rapidocr`, bukan `mac`: Apple Vision hanya ada di macOS, jadi akurasi
 yang diukur dengannya tidak bisa ditepati server Linux.
 
+Mesin yang jalan selalu mesin yang diminta. Bila mesin itu gagal, pipeline berhenti dengan
+pesan galat; tidak ada pengalihan otomatis ke mesin lain. `paddle` memakai jalur parser
+tersendiri (PP-Structure) dan di Mac jauh lebih lambat, jadi hanya jalan bila diminta:
+
+```bash
+OCR_ENGINE=paddle .venv311/bin/python run.py "dokumen.pdf"
+```
+
 ### Menambah golden document
 
 ```bash
