@@ -53,10 +53,6 @@ def _token_overlap_f1(query_tokens: list[str], item_tokens: list[str]) -> float:
     return 2.0 * recall * precision / (recall + precision)
 
 
-def _fuzzy_ratio(s1: str, s2: str) -> float:
-    return SequenceMatcher(None, s1, s2).ratio()
-
-
 def is_numeric_query(query: str) -> bool:
     return bool(_NUMERIC_QUERY.match((query or "").strip()))
 

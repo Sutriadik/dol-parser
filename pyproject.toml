@@ -68,11 +68,6 @@ addopts = "-q --tb=short"
 # Jalankan: `make rapi` (perbaiki + format) dan `make cek-gaya` (dipakai CI).
 target-version = "py311"
 line-length = 100
-extend-exclude = [
-    # Belum dirapikan ke PEP 8 (20 temuan ruff, 4 tidak bisa diperbaiki otomatis).
-    # Rapikan tersendiri lalu hapus baris ini -- jangan dicampur perubahan perilaku.
-    "app/parsers/image_enhancer.py",
-]
 
 [tool.ruff.lint]
 # E/W pycodestyle (PEP 8), F pyflakes, I urutan import, B bugbear, UP sintaks Python 3.11,

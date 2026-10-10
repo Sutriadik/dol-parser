@@ -190,11 +190,6 @@ def _resolve_ocr_engine(requested: str | None = None) -> _OcrEngine:
     return _OcrEngine(requested, options)
 
 
-# Aturan render dipindah ke app/parsers/md_render.py supaya jalur PaddleOCR memakai
-# aturan yang sama persis. Nama lama dipertahankan untuk pemanggil di bawah.
-_block_to_markdown = block_to_markdown
-
-
 # Di bawah ini markdown sebuah halaman dianggap kehilangan teks. Bukan 1,0: pembersih OCR
 # sengaja menghapus noise stempel/tanda tangan, dan itu bukan kehilangan.
 AMBANG_CAKUPAN = 0.98
@@ -470,7 +465,7 @@ class DoclingParser:
                 if not draft.text or not draft.text.strip():
                     continue
                 text_str = draft.text.strip()
-                block_md = _block_to_markdown(draft.type, text_str, penata_list)
+                block_md = block_to_markdown(draft.type, text_str, penata_list)
                 page_block_strings.append((draft, block_md))
 
             page_md = "\n\n".join(md for _, md in page_block_strings)

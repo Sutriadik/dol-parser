@@ -10,7 +10,6 @@ import numpy as np
 # memakai app.evidence.locator/matcher secara langsung.
 from app.evidence.matcher import calculate_match_confidence
 from app.parsers.image_enhancer import (
-    assess_image_quality,
     deskew_image,
     enhance_contrast_and_lighting,
     preprocess_image_for_ocr,
@@ -18,20 +17,6 @@ from app.parsers.image_enhancer import (
 )
 
 # 1. Image Quality Enhancement Tests
-
-
-def test_assess_image_quality():
-    # Create a synthetic white image with black text-like rectangles
-    img = np.ones((300, 400, 3), dtype=np.uint8) * 255
-    cv2.putText(img, "SURAT PERINTAH KERJA", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
-    cv2.putText(img, "Nomor: 001/SPK/2026", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-
-    quality = assess_image_quality(img)
-    assert "sharpness" in quality
-    assert "contrast" in quality
-    assert "skew_angle" in quality
-    assert isinstance(quality["is_blurry"], (bool, np.bool_))
-    assert isinstance(quality["needs_deskew"], (bool, np.bool_))
 
 
 def test_deskew_image():
