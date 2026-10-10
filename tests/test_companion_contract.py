@@ -550,3 +550,111 @@ def test_jenis_biaya_tidak_menambah_antrean_pm():
 
     data = {"List Item/Barang": [{"Deskripsi Item/Barang/Pekerjaan": "x", "Jenis Biaya": "MRC"}]}
     assert not any(p.endswith("Jenis Biaya") for p, _ in iter_leaf_fields(data))
+
+
+# Skor keyakinan & mutu pembacaan (companion-2026.10.5)
+#
+# Arahan mentor: yang masuk NocoDB adalah nilai hasil ekstraksi dan skor keyakinannya. Skor
+# gabungan per field sudah lama dihitung di app/evidence/locator.py tetapi tidak pernah
+# dikirim; laporan mutu dari Docling tidak pernah dibaca sama sekali.
+
+
+def test_skor_keyakinan_per_field_sampai_ke_nocodb():
+    raw = _sample_contract_extraction()
+    raw["evidence"][0]["confidence"] = 0.93
+    payload = map_contract(raw)
+    fields = {f["field_path"]: f for f in payload["extracted_field"]}
+    assert fields["Nomor Kontrak Kerja"]["confidence"] == 0.93
+    # Skor yang tidak dihitung dikirim kosong, bukan 0: nol berarti "sangat tidak yakin".
+    assert fields["Total Harga Pekerjaan"]["confidence"] is None
+    assert validate_payload(payload) == []
+
+
+def test_skor_keyakinan_tidak_mengubah_status_bukti():
+    """Skor hanya untuk mengurutkan antrean PM; Status Bukti tetap dari aturan grounding."""
+    raw = _sample_contract_extraction()
+    raw["evidence"][0]["confidence"] = 0.05
+    fields = {f["field_path"]: f for f in map_contract(raw)["extracted_field"]}
+    assert fields["Nomor Kontrak Kerja"]["system_status"] == "bukti_kuat"
+
+
+@pytest.mark.parametrize(
+    ("nilai_docling", "pilihan_skema"),
+    [("poor", "buruk"), ("fair", "cukup"), ("good", "baik"), ("excellent", "sangat_baik")],
+)
+def test_mutu_pembacaan_dipetakan_ke_pilihan_skema(nilai_docling, pilihan_skema):
+    raw = _sample_contract_extraction()
+    raw["run_info"]["parse_quality"] = {"rata_rata": nilai_docling, "terendah": nilai_docling}
+    payload = map_contract(raw)
+    assert payload["document"][0]["parse_quality"] == pilihan_skema
+    assert validate_payload(payload) == []
+
+
+@pytest.mark.parametrize("laporan", [None, {}, {"rata_rata": "unspecified"}, "good"])
+def test_tanpa_laporan_mutu_kolomnya_kosong(laporan):
+    """Jalur PaddleOCR dan hasil ekstraksi lama tidak punya laporan mutu: jangan dikarang."""
+    raw = _sample_contract_extraction()
+    raw["run_info"]["parse_quality"] = laporan
+    payload = map_contract(raw)
+    assert payload["document"][0]["parse_quality"] is None
+    assert payload["document"][0]["validation_notes"] is None
+    assert validate_payload(payload) == []
+
+
+def test_mutu_rendah_tidak_menambah_peringatan_otomatis():
+    """
+    Nilai mutu Docling ikut menghitung layout: satu PDF digital yang teksnya terbaca utuh
+    mendapat "fair"/"poor" (diukur 10 Okt 2026). Peringatan otomatis akan jadi alarm palsu,
+    jadi nilainya hanya ditampilkan di kolom Mutu Pembacaan.
+    """
+    raw = _sample_contract_extraction()
+    raw["run_info"]["parse_quality"] = {"rata_rata": "fair", "terendah": "poor"}
+    dokumen = map_contract(raw)["document"][0]
+    assert dokumen["parse_quality"] == "cukup"
+    assert dokumen["validation_notes"] is None
+
+
+class _NilaiMutu:
+    """Tiruan enum QualityGrade Docling: yang dibaca hanya atribut `.value`."""
+
+    def __init__(self, value):
+        self.value = value
+
+
+def test_laporan_mutu_docling_diringkas_dan_nan_jadi_kosong():
+    from types import SimpleNamespace
+
+    from app.parsers.docling_parser import ringkas_mutu_pembacaan
+
+    laporan = SimpleNamespace(
+        mean_grade=_NilaiMutu("good"),
+        low_grade=_NilaiMutu("fair"),
+        layout_score=0.8712,
+        ocr_score=float("nan"),  # PDF digital: Docling tidak menghitung skor OCR
+        parse_score=0.95,
+    )
+    assert ringkas_mutu_pembacaan(laporan) == {
+        "rata_rata": "good",
+        "terendah": "fair",
+        "skor_layout": 0.871,
+        "skor_ocr": None,
+        "skor_teks": 0.95,
+    }
+
+
+def test_laporan_mutu_kosong_atau_rusak_tidak_menggagalkan_pembacaan():
+    from types import SimpleNamespace
+
+    from app.parsers.docling_parser import ringkas_mutu_pembacaan
+
+    class _Rusak:
+        @property
+        def mean_grade(self):
+            raise RuntimeError("laporan tidak bisa dihitung")
+
+    tak_ternilai = SimpleNamespace(
+        mean_grade=_NilaiMutu("unspecified"), low_grade=_NilaiMutu("unspecified")
+    )
+    assert ringkas_mutu_pembacaan(None) is None
+    assert ringkas_mutu_pembacaan(tak_ternilai) is None
+    assert ringkas_mutu_pembacaan(_Rusak()) is None

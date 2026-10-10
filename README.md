@@ -36,7 +36,7 @@ awal (menit mengetik ulang per SPH, jumlah BAST yang dikembalikan) belum dikumpu
 | OCR | RapidOCR (default) | alternatif: Apple Vision (`mac`), Tesseract, PaddleOCR |
 | LLM | Qwen 2.5 7B (`qwen2.5:7b`) lewat Ollama | jalan lokal, dokumen tidak keluar dari mesin |
 | Skema ekstraksi | Pydantic v2 | per jenis dokumen, di `app/schemas/` |
-| Skema database | repo `dol-schema`, versi `companion-2026.10.4` | dipasang editable dari folder sebelah |
+| Skema database | repo `dol-schema`, versi `companion-2026.10.5` | dipasang editable dari folder sebelah |
 | Penyimpanan | NocoDB (API v2) | tempat PM mengonfirmasi per field |
 | Orkestrasi | n8n | dipegang RPA Engineer, di luar repo ini |
 
@@ -187,6 +187,14 @@ bukan apakah nilainya benar. Persetujuan tetap milik PM.
 `bukti_kuat` memeriksa **keberadaan**, bukan **peran**: nomor kontrak yang salah tetap
 `bukti_kuat` bila nomor lain di dokumen kebetulan sama. Karena itu namanya tidak memakai
 kata "terverifikasi".
+
+Di samping status, dua angka pendamping ikut masuk NocoDB (sejak `companion-2026.10.5`):
+
+- **Skor Keyakinan** per field (0–1): gabungan skor bukti, mutu teks sumber, dan hasil
+  aturan validasi. Dipakai untuk mengurutkan antrean PM; tidak menentukan status.
+- **Mutu Pembacaan** per dokumen (`buruk`/`cukup`/`baik`/`sangat_baik`): nilai mutu dari
+  laporan *confidence* Docling. Ikut menilai layout, jadi ini petunjuk, bukan ukuran salah
+  baca: PDF digital yang teksnya utuh pernah bernilai `cukup`.
 
 ---
 

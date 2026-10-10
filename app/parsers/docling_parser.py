@@ -16,8 +16,10 @@ dideteksi via app.parsers.block_grouper (lihat modul itu untuk detail & alasan).
 
 import re
 import time
+import warnings
 from collections import Counter
 from dataclasses import dataclass
+from typing import Any
 
 from app.config import config
 from app.logger import logger
@@ -36,8 +38,13 @@ from app.schemas.common import (
     full_page_bbox,
 )
 
+# Keyakinan per blok tetap konstanta, TIDAK diganti skor Docling: nilai ini ikut mengali skor
+# bukti (app/evidence/matcher.py), jadi mengubahnya menggeser ambang "bukti_kuat" untuk semua
+# field tanpa pengukuran. Docling sendiri menyebut angka skornya informatif dan bisa berubah
+# antar-versi. Laporan mutu Docling dibawa terpisah (lihat ringkas_mutu_pembacaan).
 NATIVE_CONFIDENCE = 0.97
 OCR_CONFIDENCE = 0.90
+_NILAI_MUTU = ("poor", "fair", "good", "excellent")
 LOGO_MAX_YMIN = 0.15  # gambar di 15% teratas halaman 1 dianggap logo/letterhead
 
 # Label layout ASLI dari Docling (docling_core.types.doc.labels.DocItemLabel) -> tipe kanonis
@@ -224,6 +231,46 @@ def cek_cakupan(
     return temuan
 
 
+def ringkas_mutu_pembacaan(laporan: Any) -> dict[str, Any] | None:
+    """Laporan `confidence` Docling -> ringkasan untuk metadata; None bila tidak ada isinya.
+
+    Yang dipegang nilai hurufnya (poor/fair/good/excellent), sesuai anjuran Docling; skor
+    komponen ikut dibawa hanya sebagai keterangan. Skor yang tidak dihitung Docling (mis. OCR
+    pada PDF digital, tabel di semua dokumen) bernilai NaN dan dikirim sebagai None.
+    Tidak pernah melempar: laporan mutu tidak boleh menggagalkan pembacaan dokumen.
+    """
+    if laporan is None:
+        return None
+
+    def nilai(nama: str) -> str | None:
+        v = getattr(laporan, nama, None)
+        v = str(getattr(v, "value", v) or "").lower()
+        return v if v in _NILAI_MUTU else None
+
+    def skor(nama: str) -> float | None:
+        try:
+            v = float(getattr(laporan, nama, None))
+        except (TypeError, ValueError):
+            return None
+        return round(v, 3) if v == v else None  # NaN tidak sama dengan dirinya sendiri
+
+    try:
+        # Rata-rata atas skor yang semuanya NaN membuat numpy memberi peringatan, bukan galat.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            ringkasan = {
+                "rata_rata": nilai("mean_grade"),
+                "terendah": nilai("low_grade"),
+                "skor_layout": skor("layout_score"),
+                "skor_ocr": skor("ocr_score"),
+                "skor_teks": skor("parse_score"),
+            }
+    except Exception as e:
+        logger.warning(f"⚠️  Laporan mutu Docling tidak terbaca, dilewati: {e}")
+        return None
+    return ringkasan if ringkasan["rata_rata"] or ringkasan["terendah"] else None
+
+
 def _blok_tabel(rows: list[list[str]], bbox, confidence: float) -> DraftBlock | None:
     """Satu tabel = satu blok, UTUH.
 
@@ -323,7 +370,9 @@ class DoclingParser:
         start_time = time.time()
         converter = self._get_converter(do_ocr, ocr_engine)
         kwargs = {"page_range": (1, max_pages)} if max_pages else {}
-        doc = converter.convert(pdf_path, **kwargs).document
+        hasil = converter.convert(pdf_path, **kwargs)
+        doc = hasil.document
+        mutu = ringkas_mutu_pembacaan(getattr(hasil, "confidence", None))
 
         markdown_text = clean_ocr_text(doc.export_to_markdown())
         confidence = OCR_CONFIDENCE if do_ocr else NATIVE_CONFIDENCE
@@ -526,6 +575,11 @@ class DoclingParser:
             f"{block_count} blok (setelah pengelompokan), {len(markdown_text)} karakter, "
             f"{duration_ms}ms"
         )
+        if mutu:
+            logger.info(
+                f"🔎 Mutu pembacaan Docling: rata-rata {mutu['rata_rata']}, "
+                f"terendah {mutu['terendah']}"
+            )
         return LandingAIParsedResponse(
             markdown=markdown_text,
             metadata=ParseMetadata(
@@ -536,6 +590,7 @@ class DoclingParser:
                 is_scanned=do_ocr,
                 parser_engine=engine_name,
                 teks_hilang=teks_hilang,
+                mutu_pembacaan=mutu,
             ),
             structure=DocumentStructure(children=pages_structure),
         )

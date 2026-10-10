@@ -2,7 +2,7 @@
 """
 Open ADE — penyiapan & uji sambungan NocoDB untuk skema dol-schema.
 
-    python scripts/nocodb_setup.py --create-base ["DOL Schema 2026.10.4"]
+    python scripts/nocodb_setup.py --create-base ["DOL Schema 2026.10.5"]
         Buat base berisi tabel dol-schema yang BERLAKU (judul Indonesia) dengan kolom FK
         sebagai relasi Link, lalu cetak NOCODB_TABLE_IDS-nya. Aman diulang; base lain
         tidak disentuh.
