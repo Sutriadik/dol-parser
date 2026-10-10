@@ -138,6 +138,26 @@ def find_terbilang_in_text(markdown_text: str, amount: float) -> str | None:
     return None
 
 
+def fill_terbilang_from_text(extracted: BaseModel, markdown_text: str, amounts: tuple) -> None:
+    """
+    Isi `jumlah_terbilang` dari kalimat yang benar-benar tertulis di dokumen.
+
+    `amounts` diurutkan dari yang paling diutamakan (total, lalu subtotal). Terbilang yang
+    sudah cocok dengan salah satu nominal dibiarkan: dulu putaran subtotal menimpa terbilang
+    total yang sudah benar bila dokumen menulis keduanya. Bila tidak ada kalimat yang
+    nilainya sama, field dibiarkan apa adanya -- tidak ada terbilang hasil hitungan.
+    """
+    nominal = [int(round(a)) for a in amounts if a]
+    if terbilang_to_number(extracted.jumlah_terbilang or "") in nominal:
+        return
+    for amount in nominal:
+        found = find_terbilang_in_text(markdown_text, amount)
+        if found:
+            logger.info(f"Terbilang diambil dari teks dokumen: {found}")
+            extracted.jumlah_terbilang = found
+            return
+
+
 # public API
 def prefer_confirmed_amount(extracted: BaseModel, attr: str, markdown_text: str) -> None:
     """

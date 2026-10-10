@@ -23,9 +23,6 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import config
 from app.extractors.deterministic.identifiers import fix_contract_number_roles
-from app.extractors.deterministic.numbers import (
-    terbilang_to_number,
-)
 from app.extractors.llm_output import (  # noqa: F401 -- konstanta diekspor ulang untuk tes
     LONG_TEXT_FIELDS,
     LONG_TEXT_MAX_CHARS,
@@ -52,6 +49,7 @@ from app.extractors.reconcile import (  # noqa: F401
     SUMMARY_ROW,
     clean_and_number_items,
     drop_unwritten_sph_totals,
+    fill_terbilang_from_text,
     find_terbilang_in_text,
     prefer_confirmed_amount,
     reconcile_bast_items,
@@ -741,15 +739,9 @@ class OllamaExtractor:
         # untuk dikonfirmasi PM, dan membuat aturan "sub total + PPN = total" selalu lolos.
         # Selisihnya diperiksa di app/validation/rules.py sebagai temuan, bukan diisikan.
 
-        for amount in (extracted.total_harga_pekerjaan, extracted.sub_total):
-            if amount and terbilang_to_number(extracted.jumlah_terbilang or "") != int(
-                round(amount)
-            ):
-                found = self._find_terbilang_in_text(markdown_text, amount)
-                if found:
-                    logger.info(f"🔤 Terbilang dikoreksi dari teks dokumen: {found}")
-                    extracted.jumlah_terbilang = found
-                    break
+        fill_terbilang_from_text(
+            extracted, markdown_text, (extracted.total_harga_pekerjaan, extracted.sub_total)
+        )
 
         self._reconcile_parties(extracted, markdown_text)
 
@@ -848,6 +840,10 @@ class OllamaExtractor:
         # docstring _sanitize_sph_totals.
         self._sanitize_sph_totals(extracted)
         self._drop_unwritten_sph_totals(extracted, markdown_text)
+        # Setelah total dibersihkan: terbilang hanya dicocokkan dengan nominal yang lolos.
+        fill_terbilang_from_text(
+            extracted, markdown_text, (extracted.grand_total, extracted.subtotal)
+        )
 
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None
