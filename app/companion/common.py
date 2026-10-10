@@ -32,6 +32,9 @@ STATUS_KE_SKEMA = {
     "MISSING": "kosong",
 }
 
+# Nilai mutu dari mesin pembaca (Docling) -> pilihan nilai "Mutu Pembacaan" di dol_schema.
+MUTU_KE_SKEMA = {"poor": "buruk", "fair": "cukup", "good": "baik", "excellent": "sangat_baik"}
+
 # Field yang dibaca LLM tapi sengaja TIDAK disimpan maupun ditampilkan ke PM.
 #   NPWP (2026-10-04): tidak dipakai BAST maupun verifikasi PM. Tetap diminta di prompt karena
 #   menghapusnya dari prompt terbukti menurunkan akurasi field lain (lenient 0,884 -> 0,858,
@@ -221,6 +224,11 @@ def validation_notes(validation: dict[str, Any]) -> str | None:
 
 def document_row(result: dict[str, Any], doc_key: str, doc_type: str) -> dict[str, Any]:
     run = result.get("run_info") or {}
+    # Hanya nilai rata-ratanya yang disimpan, tanpa peringatan otomatis. Diukur pada 4 dokumen
+    # (10 Okt 2026): satu PDF digital yang teksnya terbaca utuh mendapat "fair"/"poor" karena
+    # skor layout-nya rendah, sementara hasil pindai mendapat "good"/"excellent". Peringatan
+    # "mutu buruk" akan menjadi alarm palsu, jadi nilainya ditampilkan apa adanya untuk PM.
+    mutu = run.get("parse_quality") if isinstance(run.get("parse_quality"), dict) else {}
     return {
         "content_hash": doc_key,
         "doc_type": doc_type,
@@ -228,6 +236,7 @@ def document_row(result: dict[str, Any], doc_key: str, doc_type: str) -> dict[st
         "page_count": run.get("page_count") or None,
         "markdown": result.get("markdown") or None,
         "validation_notes": validation_notes(result.get("validation") or {}),
+        "parse_quality": MUTU_KE_SKEMA.get(str(mutu.get("rata_rata") or "").lower()),
     }
 
 
@@ -246,6 +255,9 @@ def extracted_field_rows(result: dict[str, Any], doc_key: str) -> list[dict[str,
                 "evidence_page": ev.get("page"),
                 "evidence_quote": txt(ev.get("evidence_text")),
                 "evidence_score": ev.get("evidence_score"),
+                # Skor gabungan dari app/evidence/locator.py. Untuk mengurutkan antrean PM;
+                # tidak menentukan Status Bukti.
+                "confidence": ev.get("confidence"),
                 "system_status": STATUS_KE_SKEMA.get(status, "perlu_dicek"),
             }
         )

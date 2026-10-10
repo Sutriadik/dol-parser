@@ -69,6 +69,10 @@ class ParseMetadata(BaseModel):
     # [{"halaman": 13, "cakupan": 0.71, "contoh": ["pendampingan", ...]}]. Kosong = utuh.
     # Tidak mendeteksi baris yang sudah dibuang di dalam OCR (skor di bawah ambang).
     teks_hilang: list[dict[str, Any]] = []
+    # Laporan mutu konversi dari mesin pembaca (Docling `ConversionResult.confidence`):
+    # {"rata_rata": "good", "terendah": "fair", "skor_layout": .., "skor_ocr": .., "skor_teks": ..}.
+    # None = mesin tidak melaporkannya (jalur PaddleOCR, atau Docling sebelum 2.34).
+    mutu_pembacaan: dict[str, Any] | None = None
 
 
 class LandingAIParsedResponse(BaseModel):

@@ -382,6 +382,8 @@ class OpenADEEngine:
             "model": config.OLLAMA_MODEL,
             "num_ctx": config.OLLAMA_NUM_CTX,
             "page_count": parsed.metadata.page_count,
+            # Laporan mutu dari mesin pembaca; masuk NocoDB sebagai "Mutu Pembacaan".
+            "parse_quality": parsed.metadata.mutu_pembacaan,
             "duplicate_pages": duplicate_pages,
             "block_count": ir.block_count,
             "llm_calls": self.extractor.llm_calls,
