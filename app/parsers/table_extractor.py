@@ -227,8 +227,14 @@ def _process_table_block(lines: list[str], table_idx: int) -> dict[str, Any] | N
     }
 
 
+# Batas dua kata yang tersambung karena OCR membuang spasinya: "HargaSatuan", "JmlHarga".
+# Minimal dua huruf kecil di kiri dan kata berawalan kapital di kanan, supaya singkatan
+# berhuruf campur seperti "UoM" tidak ikut terbelah.
+_KATA_MENYAMBUNG = re.compile(r"(?<=[a-z]{2})(?=[A-Z][a-z]{2})")
+
+
 def _header_matches(header: str, include: list[str], exclude: list[str] = ()) -> bool:
-    h = re.sub(r"[^a-z0-9 ]+", " ", header.lower())
+    h = re.sub(r"[^a-z0-9 ]+", " ", _KATA_MENYAMBUNG.sub(" ", header).lower())
     h = " " + re.sub(r"\s+", " ", h).strip() + " "
     if any(f" {ex} " in h or (" " in ex and ex in h) for ex in exclude):
         return False
