@@ -120,7 +120,7 @@ class JobQueue:
             return
         self._worker = threading.Thread(target=self._loop, name="openade-worker", daemon=True)
         self._worker.start()
-        logger.info("🧵 Worker antrian job dijalankan (1 dokumen pada satu waktu)")
+        logger.info("Worker antrian job dijalankan (1 dokumen pada satu waktu)")
 
     def submit(self, job: Job) -> Job:
         with self._lock:
@@ -128,7 +128,7 @@ class JobQueue:
             self._order.append(job.job_id)
             self._evict_locked()
         self._q.put(job.job_id)
-        logger.info(f"📥 Job {job.job_id} masuk antrian ({job.filename}, doc {job.document_id})")
+        logger.info(f"Job {job.job_id} masuk antrian ({job.filename}, doc {job.document_id})")
         return job
 
     def get(self, job_id: str) -> Job | None:
@@ -192,7 +192,7 @@ class JobQueue:
                 # Satu job gagal tidak boleh mematikan worker: job berikutnya harus tetap jalan.
                 job.status = FAILED
                 job.error = f"{type(e).__name__}: {e}"
-                logger.error(f"❌ Job {job.job_id} gagal: {job.error}\n{traceback.format_exc()}")
+                logger.error(f"Job {job.job_id} gagal: {job.error}\n{traceback.format_exc()}")
             finally:
                 job.finished_at = datetime.now(UTC).isoformat(timespec="seconds")
                 job.duration_s = round(time.time() - t0, 2)
@@ -201,9 +201,9 @@ class JobQueue:
                         job.callback_status = self._notifier(job)
                     except Exception as e:
                         job.callback_status = f"gagal: {type(e).__name__}: {e}"
-                        logger.error(f"❌ Callback job {job.job_id} gagal: {e}")
+                        logger.error(f"Callback job {job.job_id} gagal: {e}")
                 self._q.task_done()
-                logger.info(f"✅ Job {job.job_id} {job.status} dalam {job.duration_s}s")
+                logger.info(f"Job {job.job_id} {job.status} dalam {job.duration_s}s")
 
 
 def new_job_id() -> str:

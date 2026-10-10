@@ -7,7 +7,7 @@ import threading
 import urllib.error
 import urllib.request
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -68,7 +68,7 @@ def _hapus_unggahan_yatim() -> None:
     for p in yatim:
         shutil.rmtree(p, ignore_errors=True)
     if yatim:
-        logger.warning(f"🧹 {len(yatim)} unggahan dari job yang terputus restart dihapus.")
+        logger.warning(f"{len(yatim)} unggahan dari job yang terputus restart dihapus.")
 
 
 @asynccontextmanager
@@ -85,7 +85,7 @@ async def lifespan(_app: FastAPI):
     job_queue.start()
     if not config.API_KEY:
         logger.warning(
-            "⚠️  OPENADE_API_KEY kosong: API terbuka tanpa autentikasi. "
+            "OPENADE_API_KEY kosong: API terbuka tanpa autentikasi. "
             "Aman hanya selama service ini cuma dijangkau dari localhost."
         )
     yield
@@ -227,6 +227,25 @@ def _save_upload(file: UploadFile) -> Path:
     return target
 
 
+@contextmanager
+def _berkas_unggahan(file: UploadFile):
+    """
+    Simpan unggahan, serahkan path-nya, lalu hapus berkasnya apa pun hasilnya.
+
+    Galat tak terduga di dalam blok dibungkus _galat_internal; HTTPException diteruskan
+    apa adanya. Dipakai endpoint sinkron; jalur job menghapus berkasnya sendiri di _run_job.
+    """
+    temp_path = _save_upload(file)
+    try:
+        yield temp_path
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _galat_internal(e) from e
+    finally:
+        _cleanup(temp_path)
+
+
 def _cleanup(path: Path) -> None:
     shutil.rmtree(path.parent, ignore_errors=True)
 
@@ -320,16 +339,8 @@ def parse_document_endpoint(
         description="Mesin OCR: 'rapidocr' (default), 'mac', 'tesseract', atau 'paddle'",
     ),
 ):
-    temp_path = _save_upload(file)
-    try:
-        with _engine_lock:
-            return engine.parse(str(temp_path), max_pages=max_pages, ocr=ocr).model_dump()
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise _galat_internal(e) from e
-    finally:
-        _cleanup(temp_path)
+    with _berkas_unggahan(file) as temp_path, _engine_lock:
+        return engine.parse(str(temp_path), max_pages=max_pages, ocr=ocr).model_dump()
 
 
 @app.post(
@@ -449,8 +460,7 @@ def process_full_endpoint(
         "mengorkestrasi push.",
     ),
 ):
-    temp_path = _save_upload(file)
-    try:
+    with _berkas_unggahan(file) as temp_path:
         with _engine_lock:
             result = engine.process_full(
                 str(temp_path), doc_type=doc_type, max_pages=max_pages, ocr=ocr
@@ -459,12 +469,6 @@ def process_full_endpoint(
         if push_to_nocodb:
             response["nocodb_push"] = _push_to_nocodb(response["companion_payload"])
         return response
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise _galat_internal(e) from e
-    finally:
-        _cleanup(temp_path)
 
 
 # Integrasi n8n (jalur asinkron): POST /api/v1/jobs -> callback_url atau polling
@@ -517,7 +521,7 @@ def _run_job_inti(job: Job) -> dict:
             sebab = e.detail if isinstance(e, HTTPException) else f"{type(e).__name__}: {e}"
             response["nocodb_push"] = {"error": sebab}
             job.nocodb_push = f"gagal: {sebab}"
-            logger.error(f"❌ Push NocoDB job {job.job_id} gagal: {sebab}")
+            logger.error(f"Push NocoDB job {job.job_id} gagal: {sebab}")
     return response
 
 

@@ -328,3 +328,51 @@ def test_unggahan_yatim_dihapus_saat_server_naik():
         pass
     assert not yatim.exists()
     assert (config.TEMP_UPLOADS / ".gitkeep").exists()
+
+
+# Endpoint sinkron yang menerima berkas. Unggahan harus terhapus apa pun hasilnya (isinya
+# dokumen klien), dan galat tak terduga dibalas 500 yang terbungkus, bukan traceback mentah.
+@pytest.mark.parametrize(
+    "jalur,metode", [("/api/v1/parse", "parse"), ("/api/v1/process-all", "process_full")]
+)
+def test_unggahan_dihapus_walau_pemrosesan_gagal(monkeypatch, jalur, metode):
+    tersimpan = []
+    simpan_asli = main._save_upload
+
+    def simpan_dan_catat(file):
+        tersimpan.append(simpan_asli(file))
+        return tersimpan[-1]
+
+    def meledak(*_a, **_k):
+        raise ValueError("Docling gagal membuka berkas")
+
+    monkeypatch.setattr(config, "ENV", "development")
+    monkeypatch.setattr(config, "API_KEY", "")
+    monkeypatch.setattr(main, "_save_upload", simpan_dan_catat)
+    monkeypatch.setattr(main.engine, metode, meledak)
+    with TestClient(main.app) as c:
+        r = c.post(jalur, files={"file": ("SPK.pdf", io.BytesIO(PDF), "application/pdf")})
+    assert r.status_code == 500
+    assert "Docling gagal membuka berkas" in r.json()["detail"]
+    assert tersimpan and not tersimpan[0].exists()
+
+
+def test_unggahan_dihapus_setelah_parse_berhasil(monkeypatch):
+    tersimpan = []
+    simpan_asli = main._save_upload
+
+    def simpan_dan_catat(file):
+        tersimpan.append(simpan_asli(file))
+        return tersimpan[-1]
+
+    class _Hasil:
+        def model_dump(self):
+            return {"markdown": "isi"}
+
+    monkeypatch.setattr(config, "API_KEY", "")
+    monkeypatch.setattr(main, "_save_upload", simpan_dan_catat)
+    monkeypatch.setattr(main.engine, "parse", lambda *_a, **_k: _Hasil())
+    with TestClient(main.app) as c:
+        r = c.post("/api/v1/parse", files={"file": ("SPK.pdf", io.BytesIO(PDF), "application/pdf")})
+    assert r.status_code == 200 and r.json() == {"markdown": "isi"}
+    assert tersimpan and not tersimpan[0].exists()

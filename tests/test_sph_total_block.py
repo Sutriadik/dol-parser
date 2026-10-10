@@ -11,8 +11,14 @@ Rantai kegagalan yang dijaga tes ini:
 from types import SimpleNamespace
 
 from app.extractors.ollama_client import OllamaExtractor
+from app.extractors.reconcile import (
+    drop_unwritten_sph_totals,
+    fill_terbilang_from_text,
+    sanitize_sph_totals,
+)
 from app.parsers.block_grouper import DraftBlock, merge_adjacent_blocks
 from app.schemas.evidence import FieldStatus
+from app.schemas.sph import SPHExtractionSchema
 from app.validation.rules import check_amounts_grounded, validate_sph
 
 
@@ -80,7 +86,7 @@ def test_guard_mengosongkan_bukan_menghitung_ulang():
         ppn_nominal=5_243_916_533.2184,
         grand_total=5_243_916_533.2184,
     )
-    OllamaExtractor._sanitize_sph_totals(ext)
+    sanitize_sph_totals(ext)
     assert ext.ppn_nominal is None
     assert ext.grand_total is None
 
@@ -92,7 +98,7 @@ def test_guard_membiarkan_nilai_wajar():
         ppn_nominal=52_437_916.0,
         grand_total=533_218_400.0,
     )
-    OllamaExtractor._sanitize_sph_totals(ext)
+    sanitize_sph_totals(ext)
     assert ext.ppn_nominal == 52_437_916.0
     assert ext.grand_total == 533_218_400.0
 
@@ -152,7 +158,7 @@ def test_subtotal_llm_yang_tidak_tertulis_di_dokumen_dikosongkan():
         "| Jumlah Setelah PPN | 14.250.000 |\n"
     )
     ext = SimpleNamespace(subtotal=12_800_000.0, ppn_nominal=None, grand_total=14_250_000.0)
-    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    drop_unwritten_sph_totals(ext, md)
     assert ext.subtotal is None
     assert ext.grand_total == 14_250_000.0
 
@@ -160,7 +166,7 @@ def test_subtotal_llm_yang_tidak_tertulis_di_dokumen_dikosongkan():
 def test_nominal_yang_hanya_tertulis_sebagai_terbilang_dibiarkan():
     md = "Total penawaran (Empat Belas Juta Dua Ratus Lima Puluh Ribu Rupiah)."
     ext = SimpleNamespace(subtotal=None, ppn_nominal=None, grand_total=14_250_000.0)
-    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    drop_unwritten_sph_totals(ext, md)
     assert ext.grand_total == 14_250_000.0
 
 
@@ -169,9 +175,58 @@ def test_nominal_tertulis_berformat_lain_dibiarkan():
     ext = SimpleNamespace(
         subtotal=519_600_000.0, ppn_nominal=52_437_916.0, grand_total=533_218_400.0
     )
-    OllamaExtractor._drop_unwritten_sph_totals(ext, md)
+    drop_unwritten_sph_totals(ext, md)
     assert (ext.subtotal, ext.ppn_nominal, ext.grand_total) == (
         519_600_000.0,
         52_437_916.0,
         533_218_400.0,
     )
+
+
+# Jumlah Terbilang. Kasus nyata: SPH menulis total diikuti terbilang dalam kurung, tanpa kata
+# "terbilang". LLM mengosongkan field-nya, dan pencari terbilang deterministik hanya dipasang
+# untuk kontrak, sehingga Jumlah Terbilang SPH kosong walau kalimatnya ada di dokumen.
+SPH_BERTERBILANG = (
+    "Total penawaran harga sebesar Rp. 14.250.000,- (Empat Belas Juta Dua Ratus Lima Puluh "
+    "Ribu Rupiah), harga belum termasuk PPN yang berlaku."
+)
+
+
+def test_terbilang_kosong_diisi_dari_kalimat_yang_tertulis_di_dokumen():
+    ext = SimpleNamespace(jumlah_terbilang=None)
+    fill_terbilang_from_text(ext, SPH_BERTERBILANG, (14_250_000.0, 14_250_000.0))
+    assert ext.jumlah_terbilang == "Empat Belas Juta Dua Ratus Lima Puluh Ribu Rupiah"
+
+
+def test_terbilang_tidak_dikarang_bila_dokumen_tidak_menulisnya():
+    ext = SimpleNamespace(jumlah_terbilang=None)
+    fill_terbilang_from_text(ext, "Total penawaran Rp. 14.250.000,-", (14_250_000.0,))
+    assert ext.jumlah_terbilang is None
+
+
+def test_terbilang_yang_sudah_cocok_dengan_total_tidak_diganti_terbilang_subtotal():
+    """Dulu putaran kedua (subtotal) menimpa terbilang total yang sudah benar."""
+    md = (
+        "Sub total Rp 100.000.000 (Seratus Juta Rupiah). "
+        "Total Rp 111.000.000 (Seratus Sebelas Juta Rupiah)."
+    )
+    ext = SimpleNamespace(jumlah_terbilang="Seratus Sebelas Juta Rupiah")
+    fill_terbilang_from_text(ext, md, (111_000_000.0, 100_000_000.0))
+    assert ext.jumlah_terbilang == "Seratus Sebelas Juta Rupiah"
+
+
+def test_extract_sph_mengisi_terbilang_tanpa_panggilan_llm_tambahan(monkeypatch):
+    ex = OllamaExtractor()
+    hasil_llm = SPHExtractionSchema.model_validate(
+        {
+            "Vendor": {"Nama Vendor": "PT Vendor Contoh"},
+            "Nomor SPH": "001/SPH/2031",
+            "Tanggal SPH": "1 Januari 2031",
+            "Subtotal": 14_250_000.0,
+            "Grand Total": 14_250_000.0,
+        }
+    )
+    monkeypatch.setattr(ex, "_run_extraction", lambda *a, **k: hasil_llm)
+    hasil = ex.extract_sph(SPH_BERTERBILANG)
+    assert hasil.jumlah_terbilang == "Empat Belas Juta Dua Ratus Lima Puluh Ribu Rupiah"
+    assert ex.llm_calls == 0

@@ -18,6 +18,7 @@ from app.extractors.deterministic.numbers import (
     parse_id_number,
     terbilang_to_number,
 )
+from app.extractors.reconcile import find_terbilang_in_text
 from app.parsers.table_extractor import detect_item_columns, extract_items_from_markdown_tables
 from app.parsers.text_cleaner import clean_ocr_text
 from app.schemas.evidence import FieldStatus
@@ -463,13 +464,12 @@ def test_llm_options_set_context_window_and_seed():
 
 
 def test_terbilang_recovered_from_document_text():
-    from app.extractors.ollama_client import OllamaExtractor
 
     md = (
         "sebesar Rp. 166.500.000,- (Seratus Enam Puluh Enam Juta Lima Ratus "
         "Ribu Rupiah) sudah termasuk PPN"
     )
-    found = OllamaExtractor._find_terbilang_in_text(md, 166500000)
+    found = find_terbilang_in_text(md, 166500000)
     assert found == "Seratus Enam Puluh Enam Juta Lima Ratus Ribu Rupiah"
 
 

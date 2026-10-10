@@ -23,9 +23,6 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import config
 from app.extractors.deterministic.identifiers import fix_contract_number_roles
-from app.extractors.deterministic.numbers import (
-    terbilang_to_number,
-)
 from app.extractors.llm_output import (  # noqa: F401 -- konstanta diekspor ulang untuk tes
     LONG_TEXT_FIELDS,
     LONG_TEXT_MAX_CHARS,
@@ -33,6 +30,7 @@ from app.extractors.llm_output import (  # noqa: F401 -- konstanta diekspor ulan
     RUNAWAY_DIGITS,
     TEXT_MAX_CHARS,
     cap_string_lengths,
+    clear_numeric_placeholders,
     empty_result,
     is_empty,
     is_placeholder,
@@ -52,6 +50,7 @@ from app.extractors.reconcile import (  # noqa: F401
     SUMMARY_ROW,
     clean_and_number_items,
     drop_unwritten_sph_totals,
+    fill_terbilang_from_text,
     find_terbilang_in_text,
     prefer_confirmed_amount,
     reconcile_bast_items,
@@ -116,7 +115,7 @@ class OllamaExtractor:
         est_tokens = int(prompt_chars / CHARS_PER_TOKEN)
         if est_tokens > config.OLLAMA_NUM_CTX * 0.8:
             logger.warning(
-                f"⚠️  Prompt ~{est_tokens} token mendekati num_ctx={config.OLLAMA_NUM_CTX}; bagian awal bisa terpotong."
+                f"Prompt ~{est_tokens} token mendekati num_ctx={config.OLLAMA_NUM_CTX}; bagian awal bisa terpotong."
             )
         started = time.time()
         try:
@@ -151,7 +150,7 @@ class OllamaExtractor:
         )
         e_tok, e_ns = response.get("eval_count", 0), response.get("eval_duration", 0) or 1
         logger.info(
-            f"   ⏱  prefill {p_tok} tok/{p_ns / 1e9:.1f}s ({p_tok / (p_ns / 1e9):.0f} tok/s) · "
+            f"   prefill {p_tok} tok/{p_ns / 1e9:.1f}s ({p_tok / (p_ns / 1e9):.0f} tok/s) · "
             f"decode {e_tok} tok/{e_ns / 1e9:.1f}s ({e_tok / (e_ns / 1e9):.1f} tok/s) · total {elapsed:.1f}s"
         )
         return response["message"]["content"]
@@ -173,14 +172,6 @@ class OllamaExtractor:
             {"role": "user", "content": f"{doc_text}\n\n---\nTUGAS:\n{task}"},
         ]
 
-    _slim_schema = staticmethod(slim_schema)
-
-    _cap_string_lengths = staticmethod(cap_string_lengths)
-
-    _strip_runaway_digits = staticmethod(strip_runaway_digits)
-
-    _empty_result = staticmethod(empty_result)
-
     def _extract_with_llm(
         self,
         system_prompt: str,
@@ -190,15 +181,15 @@ class OllamaExtractor:
         drop_fields: tuple[str, ...] = (),
     ) -> BaseModel:
         fmt = (
-            self._slim_schema(schema_class, drop_fields)
+            slim_schema(schema_class, drop_fields)
             if drop_fields
             else schema_class.model_json_schema()
         )
-        fmt = self._cap_string_lengths(fmt)
+        fmt = cap_string_lengths(fmt)
         content = self._chat(self._doc_first_messages(system_prompt, doc_text, task), fmt=fmt)
         if RUNAWAY_DIGITS.search(content):
             try:
-                return schema_class.model_validate(self._strip_runaway_digits(json.loads(content)))
+                return schema_class.model_validate(strip_runaway_digits(json.loads(content)))
             except json.JSONDecodeError:
                 pass  # JSON terpotong: biarkan validasi di bawah melempar ValidationError
         return schema_class.model_validate_json(content)
@@ -247,12 +238,8 @@ class OllamaExtractor:
                 merged[key] = self._merge_retry_result(merged[key], value)
             elif is_empty(merged.get(key)) and not is_empty(value):
                 merged[key] = value
-                logger.info(f"  🔄 Filled: {key} = {str(value)[:80]}")
+                logger.info(f"  Filled: {key} = {str(value)[:80]}")
         return merged
-
-    _is_placeholder_value = staticmethod(is_placeholder)
-
-    _only_null_keys = staticmethod(only_null_keys)
 
     def _run_targeted_groups(
         self,
@@ -307,7 +294,7 @@ class OllamaExtractor:
         # Hanya minta field yang memang masih null. Tanpa filter ini, satu grup yang terpicu
         # menyeret seluruh field-nya (termasuk yang sudah terisi di pass 1) ke dalam output —
         # decode adalah biaya terbesar yang tersisa, jadi tiap token output harus dibayar.
-        templates = self._only_null_keys(templates, null_fields)
+        templates = only_null_keys(templates, null_fields)
         if not templates:
             return {}
 
@@ -454,7 +441,7 @@ class OllamaExtractor:
             return enriched_text
 
         logger.info(
-            f"📑 Dokumen tebal ({len(enriched_text)} karakter) → section & table preservation sampling"
+            f"Dokumen tebal ({len(enriched_text)} karakter) → section & table preservation sampling"
         )
         lines = enriched_text.splitlines()
         table_lines = [b for b in lines if b.strip().startswith("|") and b.strip().endswith("|")]
@@ -502,7 +489,7 @@ class OllamaExtractor:
         effective = "\n\n".join(p for p in parts if p.strip())
         if len(effective) > max_chars * 2:
             logger.warning(
-                f"⚠️  Teks efektif masih {len(effective)} karakter (tabel sangat besar); pertimbangkan ekstraksi tabel per halaman."
+                f"Teks efektif masih {len(effective)} karakter (tabel sangat besar); pertimbangkan ekstraksi tabel per halaman."
             )
         return effective
 
@@ -524,9 +511,8 @@ class OllamaExtractor:
         doc_text = f"Berikut teks dokumen {doc_label} hasil parsing:\n\n{effective_text}"
         self._doc_text, self._system_prompt = doc_text, system_prompt
 
-        logger.info(
-            f"🤖 Extraction pass 1 [{self.model_name}] (num_ctx={config.OLLAMA_NUM_CTX})..."
-        )
+        logger.info(f"Extraction pass 1 [{self.model_name}] (num_ctx={config.OLLAMA_NUM_CTX})...")
+        started_empty = False
         try:
             extracted = self._extract_with_llm(
                 system_prompt,
@@ -540,13 +526,14 @@ class OllamaExtractor:
             # seluruh dokumen: mulai dari hasil kosong, lalu targeted scan dan retry per field
             # di bawah mengisi field yang kosong -- memang itu tugas keduanya.
             logger.warning(
-                f"⚠️  JSON pass 1 tidak valid ({e.errors()[0].get('type')}); "
+                f"JSON pass 1 tidak valid ({e.errors()[0].get('type')}); "
                 f"lanjut dari hasil kosong lewat targeted scan & retry per field."
             )
-            extracted = self._empty_result(schema_class)
+            extracted = empty_result(schema_class)
+            started_empty = True
         data = extracted.model_dump(by_alias=True)
         total, nulls, null_names = self._count_null_fields(data)
-        logger.info(f"📊 Pass 1: {total - nulls}/{total} field terisi")
+        logger.info(f"Pass 1: {total - nulls}/{total} field terisi")
 
         def _apply(update: dict[str, Any], label: str) -> None:
             nonlocal extracted, data, total, nulls, null_names
@@ -559,16 +546,16 @@ class OllamaExtractor:
                 return
             data = extracted.model_dump(by_alias=True)
             total, nulls, null_names = self._count_null_fields(data)
-            logger.info(f"📊 Setelah {label}: {total - nulls}/{total} field terisi")
+            logger.info(f"Setelah {label}: {total - nulls}/{total} field terisi")
 
         if null_names and len(markdown_text) > targeted_min_chars:
-            logger.info(f"🎯 Targeted clause refinement untuk {len(null_names)} field null...")
+            logger.info(f"Targeted clause refinement untuk {len(null_names)} field null...")
             _apply(targeted(system_prompt, doc_text, null_names), "targeted scan")
 
         for attempt in range(config.MAX_EXTRACTION_RETRIES):
             if nulls / max(total, 1) <= config.NULL_FIELD_THRESHOLD:
                 break
-            logger.info(f"🔄 Retry {attempt + 1} (null ratio {nulls / max(total, 1):.0%})...")
+            logger.info(f"Retry {attempt + 1} (null ratio {nulls / max(total, 1):.0%})...")
             # Retry hanya meminta field yang masih kosong, bukan membangkitkan ulang seluruh
             # schema. Sebelumnya satu retry mengetik ulang ~2.300 token (termasuk tabel) hanya
             # untuk mengisi beberapa field.
@@ -584,13 +571,9 @@ class OllamaExtractor:
         if fallback_updates:
             _apply(fallback_updates, "context hints fallback")
 
+        if started_empty:
+            clear_numeric_placeholders(extracted)
         return extracted
-
-    _reconcile_items = staticmethod(reconcile_items)
-
-    _clean_and_number_items = staticmethod(clean_and_number_items)
-
-    _find_terbilang_in_text = staticmethod(find_terbilang_in_text)
 
     # item fallback
     def _fill_items_via_llm(
@@ -603,7 +586,7 @@ class OllamaExtractor:
         """
         if not self._doc_text:
             return []
-        logger.info(f"📋 Tabel tidak terdeteksi parser → minta LLM menyusun '{alias}'...")
+        logger.info(f"Tabel tidak terdeteksi parser → minta LLM menyusun '{alias}'...")
         result = self._ask_json(
             self._system_prompt,
             self._doc_text,
@@ -624,7 +607,7 @@ class OllamaExtractor:
             except Exception as e:
                 logger.debug(f"Baris item dari LLM tidak valid, dilewati: {e}")
         if items:
-            logger.info(f"📋 {len(items)} item disusun oleh LLM (fallback)")
+            logger.info(f"{len(items)} item disusun oleh LLM (fallback)")
         return items
 
     OPTIONAL_ITEM_ATTRS = ("spesifikasi", "brand_merek", "nomor_part", "periode", "keterangan")
@@ -672,7 +655,7 @@ class OllamaExtractor:
                     filled += 1
         if filled:
             logger.info(
-                f"🧩 {filled} kolom opsional item dilengkapi LLM ({', '.join(alias_of.values())})"
+                f"{filled} kolom opsional item dilengkapi LLM ({', '.join(alias_of.values())})"
             )
 
     def _apply_hint_fallbacks(
@@ -682,9 +665,7 @@ class OllamaExtractor:
         for attr, hint_key in mapping.items():
             if is_placeholder(getattr(extracted, attr, None)) and hints.get(hint_key):
                 setattr(extracted, attr, hints[hint_key])
-                logger.info(f"📍 Fallback regex: {hint_key} = {hints[hint_key]}")
-
-    _prefer_confirmed_amount = staticmethod(prefer_confirmed_amount)
+                logger.info(f"Fallback regex: {hint_key} = {hints[hint_key]}")
 
     def extract_contract(self, markdown_text: str) -> ContractExtractionSchema:
         extracted: ContractExtractionSchema = self._run_extraction(
@@ -698,7 +679,7 @@ class OllamaExtractor:
         )
 
         kelompok = extract_item_groups_from_markdown_tables(markdown_text, doc_type="contract")
-        extracted.items = self._reconcile_items(
+        extracted.items = reconcile_items(
             extracted.items,
             [i for g in kelompok for i in g],
             ItemBarangPekerjaan,
@@ -715,10 +696,10 @@ class OllamaExtractor:
                 "List Item/Barang",
                 ("Deskripsi", "Volume", "Harga Satuan", "Jumlah Harga"),
             )
-        extracted.items = self._clean_and_number_items(extracted.items, "deskripsi", "nomor_item")
+        extracted.items = clean_and_number_items(extracted.items, "deskripsi", "nomor_item")
         self._enrich_item_columns(extracted.items, "deskripsi")
 
-        self._prefer_confirmed_amount(extracted, "total_harga_pekerjaan", markdown_text)
+        prefer_confirmed_amount(extracted, "total_harga_pekerjaan", markdown_text)
 
         self._apply_hint_fallbacks(
             extracted,
@@ -741,15 +722,9 @@ class OllamaExtractor:
         # untuk dikonfirmasi PM, dan membuat aturan "sub total + PPN = total" selalu lolos.
         # Selisihnya diperiksa di app/validation/rules.py sebagai temuan, bukan diisikan.
 
-        for amount in (extracted.total_harga_pekerjaan, extracted.sub_total):
-            if amount and terbilang_to_number(extracted.jumlah_terbilang or "") != int(
-                round(amount)
-            ):
-                found = self._find_terbilang_in_text(markdown_text, amount)
-                if found:
-                    logger.info(f"🔤 Terbilang dikoreksi dari teks dokumen: {found}")
-                    extracted.jumlah_terbilang = found
-                    break
+        fill_terbilang_from_text(
+            extracted, markdown_text, (extracted.total_harga_pekerjaan, extracted.sub_total)
+        )
 
         self._reconcile_parties(extracted, markdown_text)
 
@@ -763,7 +738,7 @@ class OllamaExtractor:
         )
         if nomor_baru != extracted.nomor_kontrak:
             logger.info(
-                f"🔄 Dua nomor kontrak tertukar peran → dikoreksi dari penanda perusahaan: "
+                f"Dua nomor kontrak tertukar peran → dikoreksi dari penanda perusahaan: "
                 f"kontrak={nomor_baru}, internal={internal_baru}"
             )
             extracted.nomor_kontrak, extracted.nomor_kontrak_internal = nomor_baru, internal_baru
@@ -771,8 +746,6 @@ class OllamaExtractor:
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None
         return extracted
-
-    _reconcile_bast_items = staticmethod(reconcile_bast_items)
 
     def _reconcile_parties(
         self, extracted: ContractExtractionSchema | BASTExtractionSchema, markdown_text: str
@@ -790,7 +763,7 @@ class OllamaExtractor:
             and p2_hint.get("alamat")
             and p1_hint["alamat"] != p2_hint["alamat"]
         ):
-            logger.info("🔧 Alamat pihak pertama & kedua identik → dikoreksi dari preamble")
+            logger.info("Alamat pihak pertama & kedua identik → dikoreksi dari preamble")
             p1.alamat, p2.alamat = p1_hint["alamat"], p2_hint["alamat"]
 
         c1, c2 = (
@@ -800,7 +773,7 @@ class OllamaExtractor:
         if c1 and c2:
             e1, e2 = p1.nama_perusahaan.strip().lower(), p2.nama_perusahaan.strip().lower()
             if (e1 == c2 and e2 == c1) or e1 == e2:
-                logger.info("🔄 Nama perusahaan pihak tertukar/identik → dikoreksi dari preamble")
+                logger.info("Nama perusahaan pihak tertukar/identik → dikoreksi dari preamble")
                 p1.nama_perusahaan, p2.nama_perusahaan = (
                     p1_hint["nama_perusahaan"],
                     p2_hint["nama_perusahaan"],
@@ -822,7 +795,7 @@ class OllamaExtractor:
             targeted_min_chars=1000,
         )
         kelompok = extract_item_groups_from_markdown_tables(markdown_text, doc_type="sph")
-        extracted.items = self._reconcile_items(
+        extracted.items = reconcile_items(
             extracted.items,
             [i for g in kelompok for i in g],
             SPHItemDetail,
@@ -839,23 +812,23 @@ class OllamaExtractor:
                 "Daftar Penawaran Harga",
                 ("Nama Item", "Qty", "Harga Satuan", "Total Harga"),
             )
-        extracted.items = self._clean_and_number_items(extracted.items, "nama_item", "nomor")
+        extracted.items = clean_and_number_items(extracted.items, "nama_item", "nomor")
         self._enrich_item_columns(extracted.items, "nama_item")
 
         # --- Sanity guard PPN & Grand Total ---
         # LLM kadang mengembalikan angka PPN / Grand Total yang absurd (mis. digit dua
         # angka tersambung). Nilai absurd DIKOSONGKAN, tidak dihitung ulang -- lihat
         # docstring _sanitize_sph_totals.
-        self._sanitize_sph_totals(extracted)
-        self._drop_unwritten_sph_totals(extracted, markdown_text)
+        sanitize_sph_totals(extracted)
+        drop_unwritten_sph_totals(extracted, markdown_text)
+        # Setelah total dibersihkan: terbilang hanya dicocokkan dengan nominal yang lolos.
+        fill_terbilang_from_text(
+            extracted, markdown_text, (extracted.grand_total, extracted.subtotal)
+        )
 
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None
         return extracted
-
-    _sanitize_sph_totals = staticmethod(sanitize_sph_totals)
-
-    _drop_unwritten_sph_totals = staticmethod(drop_unwritten_sph_totals)
 
     def extract_bast(self, markdown_text: str) -> BASTExtractionSchema:
         """
@@ -873,7 +846,7 @@ class OllamaExtractor:
             self._extract_targeted_clauses,
             targeted_min_chars=800,
         )
-        extracted.items = self._reconcile_bast_items(
+        extracted.items = reconcile_bast_items(
             extracted.items,
             extract_items_from_markdown_tables(markdown_text, doc_type="bast"),
         )
@@ -883,7 +856,7 @@ class OllamaExtractor:
                 "Daftar Barang/Pekerjaan Diserahkan",
                 ("Deskripsi", "Volume", "Satuan"),
             )
-        extracted.items = self._clean_and_number_items(extracted.items, "deskripsi", "nomor")
+        extracted.items = clean_and_number_items(extracted.items, "deskripsi", "nomor")
         self._reconcile_parties(extracted, markdown_text)
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None

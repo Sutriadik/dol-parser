@@ -96,7 +96,7 @@ def main() -> int:
         ),
     }
     for nama, (ok, ket) in hasil.items():
-        print(f"  {'✅' if ok else '❌'} {nama:28} {ket}")
+        print(f"  {'OK   ' if ok else 'TIDAK'} {nama:28} {ket}")
 
     siap = [n.split()[0] for n, (ok, _) in hasil.items() if ok]
     print(f"\nBisa dipakai: {', '.join(siap) or '(tidak ada)'}")

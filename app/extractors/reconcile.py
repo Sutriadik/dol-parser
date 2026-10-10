@@ -75,7 +75,7 @@ def reconcile_items(
         if salinan:
             table_items = max(salinan, key=len)
             logger.info(
-                f"📊 {len(table_groups)} tabel harga, gabungannya tidak cocok subtotal/total; "
+                f"{len(table_groups)} tabel harga, gabungannya tidak cocok subtotal/total; "
                 f"memakai satu tabel ({len(table_items)} item) yang jumlahnya sama dengan "
                 "nominal tertulis di dokumen"
             )
@@ -101,7 +101,7 @@ def reconcile_items(
                 if hasattr(table_item, attr) and getattr(table_item, attr) is None:
                     setattr(table_item, attr, getattr(llm_item, attr, None))
     logger.info(
-        f"📊 Item dari tabel dipakai ({len(llm_items)} LLM → {len(validated)} tabel, "
+        f"Item dari tabel dipakai ({len(llm_items)} LLM → {len(validated)} tabel, "
         f"cocok subtotal={table_ok})"
     )
     return validated
@@ -138,6 +138,26 @@ def find_terbilang_in_text(markdown_text: str, amount: float) -> str | None:
     return None
 
 
+def fill_terbilang_from_text(extracted: BaseModel, markdown_text: str, amounts: tuple) -> None:
+    """
+    Isi `jumlah_terbilang` dari kalimat yang benar-benar tertulis di dokumen.
+
+    `amounts` diurutkan dari yang paling diutamakan (total, lalu subtotal). Terbilang yang
+    sudah cocok dengan salah satu nominal dibiarkan: dulu putaran subtotal menimpa terbilang
+    total yang sudah benar bila dokumen menulis keduanya. Bila tidak ada kalimat yang
+    nilainya sama, field dibiarkan apa adanya -- tidak ada terbilang hasil hitungan.
+    """
+    nominal = [int(round(a)) for a in amounts if a]
+    if terbilang_to_number(extracted.jumlah_terbilang or "") in nominal:
+        return
+    for amount in nominal:
+        found = find_terbilang_in_text(markdown_text, amount)
+        if found:
+            logger.info(f"Terbilang diambil dari teks dokumen: {found}")
+            extracted.jumlah_terbilang = found
+            return
+
+
 # public API
 def prefer_confirmed_amount(extracted: BaseModel, attr: str, markdown_text: str) -> None:
     """
@@ -160,7 +180,7 @@ def prefer_confirmed_amount(extracted: BaseModel, attr: str, markdown_text: str)
     if in_document:
         return
     logger.warning(
-        f"⚠️  {attr}: nilai LLM {current} tidak tertulis di dokumen; memakai "
+        f"{attr}: nilai LLM {current} tidak tertulis di dokumen; memakai "
         f"{confirmed[0]:,.0f} yang dikonfirmasi oleh terbilangnya."
     )
     setattr(extracted, attr, confirmed[0])
@@ -182,7 +202,7 @@ def reconcile_bast_items(
     except Exception as e:
         logger.warning(f"Item tabel BAST tidak valid, tetap memakai item LLM: {e}")
         return llm_items
-    logger.info(f"📊 Item BAST dari tabel dipakai ({len(llm_items)} LLM → {len(validated)} tabel)")
+    logger.info(f"Item BAST dari tabel dipakai ({len(llm_items)} LLM → {len(validated)} tabel)")
     return validated
 
 
@@ -208,7 +228,7 @@ def drop_unwritten_sph_totals(ext: "SPHExtractionSchema", markdown_text: str) ->
         if nilai is None or nominal_tertulis(nilai, markdown_text):
             continue
         logger.warning(
-            f"⚠️  {attr}: nilai LLM {nilai:,.0f} tidak tertulis di dokumen -> dikosongkan "
+            f"{attr}: nilai LLM {nilai:,.0f} tidak tertulis di dokumen -> dikosongkan "
             "untuk diisi PM, tidak dihitung ulang."
         )
         setattr(ext, attr, None)
@@ -236,7 +256,7 @@ def sanitize_sph_totals(ext: "SPHExtractionSchema") -> None:
     if not (ppn_absurd or grand_absurd):
         return
     logger.warning(
-        f"⚠️ Sanity guard: PPN/Grand Total absurd (PPN={ppn}, Grand={grand}, "
+        f"Sanity guard: PPN/Grand Total absurd (PPN={ppn}, Grand={grand}, "
         f"Subtotal={subtotal}) -> dikosongkan untuk ditinjau PM, tidak dihitung ulang."
     )
     if ppn_absurd:

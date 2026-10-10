@@ -133,7 +133,7 @@ def strip_runaway_digits(data: Any) -> Any:
         return [strip_runaway_digits(v) for v in data]
     if isinstance(data, str) and RUNAWAY_DIGITS.search(data):
         cleaned = RUNAWAY_DIGITS.sub("", data).strip(" ,;-")
-        logger.warning(f"⚠️  Deret angka perulangan LLM dibuang: {data[:60]!r}...")
+        logger.warning(f"Deret angka perulangan LLM dibuang: {data[:60]!r}...")
         return cleaned or None
     return data
 
@@ -154,11 +154,28 @@ def empty_result(schema_class: type) -> BaseModel:
                 out[info.alias or name] = ""  # teks wajib non-null; dianggap kosong
             elif getattr(info.annotation, "__origin__", None) is list:
                 out[info.alias or name] = []
+            elif info.annotation in (float, int):
+                # Angka wajib tidak boleh None. 0 dipakai sebagai penanda kosong (is_empty
+                # menganggapnya kosong, jadi retry tetap memintanya); pemanggil WAJIB
+                # menghapus yang tersisa dengan clear_numeric_placeholders.
+                out[info.alias or name] = 0
             else:
                 out[info.alias or name] = None
         return out
 
     return schema_class.model_validate(empty(schema_class))
+
+
+def clear_numeric_placeholders(model: BaseModel) -> None:
+    """
+    Kosongkan angka wajib yang masih berisi penanda 0 dari empty_result.
+
+    Nol yang lolos sampai ke PM tampak seperti nilai yang terbaca ("Subtotal 0"), padahal
+    artinya tidak ada yang terbaca. None lebih jujur: field itu muncul sebagai kosong.
+    """
+    for name, info in type(model).model_fields.items():
+        if info.is_required() and info.annotation in (float, int) and getattr(model, name) == 0:
+            setattr(model, name, None)
 
 
 # targeted clause

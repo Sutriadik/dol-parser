@@ -4,6 +4,8 @@ Unit Tests untuk Ekstraksi Tabel Fleksibel & Redaksi Lengkap (Open ADE)
 
 from app.extractors.ollama_client import OllamaExtractor
 from app.parsers.table_extractor import (
+    detect_item_columns,
+    extract_item_groups_from_markdown_tables,
     extract_tables_from_markdown,
     is_markdown_table_separator,
     parse_markdown_table_row,
@@ -508,3 +510,35 @@ def test_subtotal_yang_hanya_tertulis_sebagai_terbilang_tetap_jadi_rujukan():
     assert "12.750.000" not in md
     items = _rekonsiliasi_kontrak(md, [12_750_000, None])
     assert len(items) == 4
+
+
+# Judul kolom yang menyambung. OCR kadang membuang spasi di antara dua kata ("HargaSatuan",
+# "TotalHarga"; bentuk ini ditemukan di hasil pindai nyata). Pencocokan judul bekerja per
+# kata, sehingga kolom harga tidak dikenali dan nominalnya jatuh ke Atribut Tambahan.
+def test_judul_kolom_yang_menyambung_tetap_dikenali_sebagai_harga():
+    kolom = detect_item_columns(["No", "Uraian", "Qty", "Satuan", "HargaSatuan", "TotalHarga"])
+    assert kolom["price"] == ["HargaSatuan"]
+    assert kolom["total"] == ["TotalHarga"]
+    assert kolom["qty"] == "Qty" and kolom["unit"] == "Satuan"
+
+
+def test_singkatan_berhuruf_campur_tidak_ikut_dipecah():
+    """ "UoM" harus tetap terbaca sebagai satuan, bukan dipecah menjadi "Uo M"."""
+    kolom = detect_item_columns(["No", "Deskripsi", "Qty", "UoM", "JmlHarga"])
+    assert kolom["unit"] == "UoM"
+    assert kolom["total"] == ["JmlHarga"]
+
+
+def test_item_dari_tabel_berjudul_menyambung_memuat_harga():
+    md = (
+        "| No | Uraian | Qty | Satuan | HargaSatuan | TotalHarga |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | Switch 24 port | 2 | Unit | 4.500.000 | 9.000.000 |\n"
+        "| 2 | Jasa instalasi | 1 | Paket | 1.250.000 | 1.250.000 |\n"
+    )
+    kelompok = extract_item_groups_from_markdown_tables(md, doc_type="sph")
+    items = [SPHItemDetail.model_validate(i) for g in kelompok for i in g]
+    assert [(i.harga_satuan, i.total_harga) for i in items] == [
+        (4_500_000.0, 9_000_000.0),
+        (1_250_000.0, 1_250_000.0),
+    ]

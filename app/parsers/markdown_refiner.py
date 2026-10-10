@@ -147,7 +147,7 @@ class MarkdownRefiner:
             return cleaned_text
 
         logger.info(
-            "🧠 LLM Qwen 2.5 Markdown Refiner: Mendeteksi anomali OCR/kalimat rumpang, memoles teks..."
+            "LLM Qwen 2.5 Markdown Refiner: Mendeteksi anomali OCR/kalimat rumpang, memoles teks..."
         )
         t0 = time.time()
 
@@ -171,13 +171,11 @@ class MarkdownRefiner:
 
             result = "\n\n<!-- PAGE BREAK -->\n\n".join(refined_pages)
             result = clean_ocr_text(result)
-            logger.info(f"✅ LLM Markdown Refiner selesai ({time.time() - t0:.2f}s)")
+            logger.info(f"LLM Markdown Refiner selesai ({time.time() - t0:.2f}s)")
             return result
 
         except Exception as e:
-            logger.warning(
-                f"⚠️  LLM Markdown Refiner gagal ({e}), fallback ke deterministic cleaner."
-            )
+            logger.warning(f"LLM Markdown Refiner gagal ({e}), fallback ke deterministic cleaner.")
             return cleaned_text
 
     def _call_ollama_refine(self, page_text: str) -> str:

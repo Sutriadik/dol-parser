@@ -336,7 +336,7 @@ class CompanionPusher:
             for k in ("inserted", "updated", "deleted")
         }
         logger.info(
-            f"🗄  NocoDB companion: {hasil['inserted']} baru, {hasil['updated']} "
+            f"NocoDB companion: {hasil['inserted']} baru, {hasil['updated']} "
             f"diperbarui, {hasil['deleted']} baris basi dihapus"
         )
         if rencana["dilewati"]:

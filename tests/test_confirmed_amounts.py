@@ -9,7 +9,7 @@ LLM mengembalikan 1.130.000.000 yang tidak ada di dokumen.
 from types import SimpleNamespace
 
 from app.extractors.deterministic.numbers import confirmed_amounts
-from app.extractors.ollama_client import OllamaExtractor
+from app.extractors.reconcile import prefer_confirmed_amount
 
 PASAL_6 = (
     "Nilai harga sebesar Rp... 642.375.000,- (Enam Ratus Empat Puluh Dua Juta Tiga Ratus "
@@ -19,7 +19,7 @@ PASAL_6 = (
 
 def _fix(nilai, teks):
     obj = SimpleNamespace(total_harga_pekerjaan=nilai)
-    OllamaExtractor._prefer_confirmed_amount(obj, "total_harga_pekerjaan", teks)
+    prefer_confirmed_amount(obj, "total_harga_pekerjaan", teks)
     return obj.total_harga_pekerjaan
 
 

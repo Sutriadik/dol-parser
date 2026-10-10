@@ -89,7 +89,7 @@ class LayoutParser:
                 lang="en",  # Model layout PP-Structure hanya mendukung 'en' atau 'ch'
                 use_gpu=False,
             )
-            logger.info("🏗️  PP-Structure layout engine initialized (lang=en)")
+            logger.info("PP-Structure layout engine initialized (lang=en)")
         return cls._engine
 
     def _normalize_bbox(

@@ -515,7 +515,7 @@ class ContextAnalyzer:
             return text
 
         logger.info(
-            f"🧠 Context Analyzer: {len(analysis.sections)} sections, {len(analysis.entities)} "
+            f"Context Analyzer: {len(analysis.sections)} sections, {len(analysis.entities)} "
             "pre-extracted entities"
         )
         lines = text.split("\n")

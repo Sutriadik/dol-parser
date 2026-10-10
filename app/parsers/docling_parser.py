@@ -161,13 +161,13 @@ def _resolve_ocr_engine(requested: str | None = None) -> _OcrEngine:
         if sys.platform == "darwin":
             try:
                 engine = _OcrEngine("mac", _load("mac"))
-                logger.info("⚡ OCR: Apple Vision (OCR_ENGINE=auto di macOS)")
+                logger.info("OCR: Apple Vision (OCR_ENGINE=auto di macOS)")
                 return engine
             except Exception as e:
-                logger.warning(f"⚠️  Apple Vision tidak tersedia walau di macOS: {e}")
+                logger.warning(f"Apple Vision tidak tersedia walau di macOS: {e}")
         # Platform lain: serahkan ke default Docling, tapi katakan dengan jelas.
         logger.warning(
-            f"⚠️  OCR: memakai engine DEFAULT Docling di platform '{sys.platform}'. "
+            f"OCR: memakai engine DEFAULT Docling di platform '{sys.platform}'. "
             "Hasil bisa berbeda dengan macOS. Set OCR_ENGINE secara eksplisit "
             f"({'|'.join(_OCR_ENGINES)}) untuk produksi."
         )
@@ -186,7 +186,7 @@ def _resolve_ocr_engine(requested: str | None = None) -> _OcrEngine:
             f"OCR_ENGINE='{requested}' ({_OCR_ENGINES[requested][2]}) diminta tapi tidak bisa "
             f"dimuat di platform ini: {e}"
         ) from e
-    logger.info(f"⚡ OCR: {_OCR_ENGINES[requested][2]} (OCR_ENGINE={requested})")
+    logger.info(f"OCR: {_OCR_ENGINES[requested][2]} (OCR_ENGINE={requested})")
     return _OcrEngine(requested, options)
 
 
@@ -261,7 +261,7 @@ def ringkas_mutu_pembacaan(laporan: Any) -> dict[str, Any] | None:
                 "skor_teks": skor("parse_score"),
             }
     except Exception as e:
-        logger.warning(f"⚠️  Laporan mutu Docling tidak terbaca, dilewati: {e}")
+        logger.warning(f"Laporan mutu Docling tidak terbaca, dilewati: {e}")
         return None
     return ringkasan if ringkasan["rata_rata"] or ringkasan["terendah"] else None
 
@@ -309,11 +309,9 @@ class DoclingParser:
                     num_threads=config.PARSER_NUM_THREADS,
                     device=AcceleratorDevice.AUTO,
                 )
-                logger.info(
-                    f"⚡ Docling accelerator: {config.PARSER_NUM_THREADS} thread, device=AUTO"
-                )
+                logger.info(f"Docling accelerator: {config.PARSER_NUM_THREADS} thread, device=AUTO")
             except Exception as e:
-                logger.info(f"ℹ️ AcceleratorOptions tidak tersedia, memakai default Docling: {e}")
+                logger.info(f"AcceleratorOptions tidak tersedia, memakai default Docling: {e}")
             if do_ocr:
                 options.images_scale = (
                     2.0  # Tingkatkan DPI render citra untuk OCR agar teks halus/miring terbaca
@@ -325,7 +323,7 @@ class DoclingParser:
                 format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
             )
             logger.info(
-                f"📄 Docling converter dimuat (OCR: {do_ocr}, Table Structure: True, Scale: "
+                f"Docling converter dimuat (OCR: {do_ocr}, Table Structure: True, Scale: "
                 f"{2.0 if do_ocr else 1.0})"
             )
         return self._converters[cache_key]
@@ -558,7 +556,7 @@ class DoclingParser:
         teks_hilang = cek_cakupan({h: "\n".join(t) for h, t in sumber_halaman.items()}, md_halaman)
         for t in teks_hilang:
             logger.warning(
-                f"⚠️  Halaman {t['halaman']}: hanya {t['cakupan']:.0%} teks Docling sampai ke "
+                f"Halaman {t['halaman']}: hanya {t['cakupan']:.0%} teks Docling sampai ke "
                 f"markdown; contoh yang hilang: {', '.join(t['contoh'])}"
             )
 
@@ -566,13 +564,13 @@ class DoclingParser:
         engine_name = "ibm-docling" + ("+ocr" if do_ocr else "")
         block_count = sum(len(p.children) for p in pages_structure)
         logger.info(
-            f"✅ Docling selesai [{engine_name}]: {len(pages_structure)} halaman, "
+            f"Docling selesai [{engine_name}]: {len(pages_structure)} halaman, "
             f"{block_count} blok (setelah pengelompokan), {len(markdown_text)} karakter, "
             f"{duration_ms}ms"
         )
         if mutu:
             logger.info(
-                f"🔎 Mutu pembacaan Docling: rata-rata {mutu['rata_rata']}, "
+                f"Mutu pembacaan Docling: rata-rata {mutu['rata_rata']}, "
                 f"terendah {mutu['terendah']}"
             )
         return LandingAIParsedResponse(
