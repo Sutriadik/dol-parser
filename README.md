@@ -1,4 +1,4 @@
-# dol-parser: Parser & Ekstraktor Dokumen Pengadaan (Open ADE)
+# dol-parser: Parser & Ekstraktor Dokumen Project (Open ADE)
 
 Membaca PDF **Kontrak/SPK dan SPH vendor** lalu mengeluarkan data terstruktur yang tertaut
 ke kutipan sumbernya, siap masuk NocoDB untuk dikonfirmasi PM. BAST juga bisa diekstrak,
