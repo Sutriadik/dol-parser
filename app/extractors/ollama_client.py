@@ -1,5 +1,5 @@
 """
-Open ADE — Ollama LLM Extraction Client.
+Open ADE: Ollama LLM Extraction Client.
 
 Alur per dokumen: context enrichment → 1x schema extraction → targeted clause (hanya field
 yang null) → retry (opsional) → rekonsiliasi deterministik (tabel, terbilang, hint regex).
@@ -13,6 +13,7 @@ Perubahan penting:
 """
 
 import json
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -70,7 +71,7 @@ from app.services.context_analyzer import ContextAnalyzer
 
 # Field yang diisi deterministik dari tabel hasil parser (extract_items_from_markdown_tables /
 # extract_tables_from_markdown + _reconcile_items). Field ini dibuang dari schema pass-1 supaya
-# LLM tidak menghabiskan ribuan token output mengetik ulang tabel yang sudah kita miliki —
+# LLM tidak menghabiskan ribuan token output mengetik ulang tabel yang sudah kita miliki;
 # pada dokumen uji, dua field ini saja menyumbang 69% token output.
 DETERMINISTIC_FIELDS = (
     "List Item/Barang",
@@ -78,10 +79,23 @@ DETERMINISTIC_FIELDS = (
     "Daftar Barang/Pekerjaan Diserahkan",
     "Daftar Tabel Terstruktur",
 )
-# Field deterministik tidak boleh ikut menghitung rasio null — kalau ikut, `items` yang masih
+# Field deterministik tidak boleh ikut menghitung rasio null. Kalau ikut, `items` yang masih
 # kosong saat pass-1 akan memicu retry yang tidak perlu.
 NULL_COUNT_SKIP = set(DETERMINISTIC_FIELDS)
 CHARS_PER_TOKEN = 3.0  # estimasi kasar untuk teks Indonesia pada tokenizer Qwen
+
+
+def _perusahaan_sama(a: str | None, b: str | None) -> bool:
+    """Nama perusahaan dianggap sama bila salah satunya kosong atau separuh katanya beririsan
+    (abaikan PT/CV dan tanda baca, karena OCR dan LLM menulisnya berbeda-beda)."""
+
+    def kata(s: str | None) -> set[str]:
+        return set(re.findall(r"[a-z0-9]{3,}", (s or "").lower())) - {"tbk", "persero"}
+
+    ka, kb = kata(a), kata(b)
+    if not ka or not kb:
+        return True
+    return len(ka & kb) / min(len(ka), len(kb)) >= 0.5
 
 
 class OllamaExtractor:
@@ -254,7 +268,7 @@ class OllamaExtractor:
         Dokumen penuh (`doc_text`) dipakai sebagai prefix supaya KV-cache Ollama kena
         (prefill ~0,5 detik, bukan ~80 detik). Cuplikan klausul TIDAK ikut dikirim: dulu
         cuplikan itu menggantikan dokumen, sekarang dokumennya sudah utuh di prefix, jadi
-        menempelkannya lagi hanya menduplikasi isi — sempat membengkakkan prompt targeted
+        menempelkannya lagi hanya menduplikasi isi; sempat membengkakkan prompt targeted
         dari 10.300 jadi 16.300 token dan memperlambat decode hampir dua kali lipat.
         Arahan lokasi cukup lewat kalimat `task` tiap grup.
         """
@@ -292,7 +306,7 @@ class OllamaExtractor:
             return {}
 
         # Hanya minta field yang memang masih null. Tanpa filter ini, satu grup yang terpicu
-        # menyeret seluruh field-nya (termasuk yang sudah terisi di pass 1) ke dalam output —
+        # menyeret seluruh field-nya (termasuk yang sudah terisi di pass 1) ke dalam output,
         # decode adalah biaya terbesar yang tersisa, jadi tiap token output harus dibayar.
         templates = only_null_keys(templates, null_fields)
         if not templates:
@@ -615,8 +629,8 @@ class OllamaExtractor:
     def _enrich_item_columns(self, items: list[BaseModel], desc_attr: str) -> None:
         """
         Baris & angka sudah deterministik dari tabel parser. Kolom deskriptif (spesifikasi,
-        merek, part number) sering tersebar di paragraf lain, jadi kolom itu — dan HANYA kolom
-        itu — diisi LLM lewat satu panggilan kecil di atas prefix dokumen yang sudah ter-cache.
+        merek, part number) sering tersebar di paragraf lain, jadi kolom itu (dan HANYA kolom
+        itu) diisi LLM lewat satu panggilan kecil di atas prefix dokumen yang sudah ter-cache.
         """
         if not items or not self._doc_text:
             return
@@ -726,7 +740,7 @@ class OllamaExtractor:
             extracted, markdown_text, (extracted.total_harga_pekerjaan, extracted.sub_total)
         )
 
-        self._reconcile_parties(extracted, markdown_text)
+        self._reconcile_parties(extracted, markdown_text, penerima_surat_pihak_kedua=True)
 
         # Dijalankan SETELAH rekonsiliasi pihak: penentu peran kedua nomor kontrak adalah
         # nama perusahaan tiap pihak, jadi nama itu harus sudah benar lebih dulu.
@@ -748,14 +762,36 @@ class OllamaExtractor:
         return extracted
 
     def _reconcile_parties(
-        self, extracted: ContractExtractionSchema | BASTExtractionSchema, markdown_text: str
+        self,
+        extracted: ContractExtractionSchema | BASTExtractionSchema,
+        markdown_text: str,
+        penerima_surat_pihak_kedua: bool = False,
     ) -> None:
         hints = self.context_analyzer.get_entity_hints(markdown_text)
         p1_hint, p2_hint = hints.get("Pihak Pertama") or {}, hints.get("Pihak Kedua") or {}
+        p1, p2 = extracted.pihak_pertama, extracted.pihak_kedua
+        if penerima_surat_pihak_kedua and not p2_hint:
+            # Surat perintah ditujukan kepada pelaksana, yaitu Pihak Kedua. Dipakai hanya bila
+            # perusahaannya sama dengan Pihak Kedua hasil LLM; tanpa itu peran tidak terbukti.
+            surat = self.context_analyzer.parse_alamat_surat(markdown_text)
+            if p2.nama_perusahaan and _perusahaan_sama(
+                p2.nama_perusahaan, surat.get("nama_perusahaan")
+            ):
+                p2_hint = surat
+
+        # Field yang dikosongkan LLM diisi dari preambule, per pihak. Dulu seluruh langkah ini
+        # dilewati bila salah satu pihak tanpa petunjuk, padahal petunjuk yang ada cocok dengan
+        # golden pada 7 dari 7 field yang diuji. Nilai dari LLM tidak pernah ditimpa di sini.
+        for party, hint in ((p1, p1_hint), (p2, p2_hint)):
+            if not _perusahaan_sama(party.nama_perusahaan, hint.get("nama_perusahaan")):
+                continue  # petunjuk milik perusahaan lain: jangan dipasang ke pihak ini
+            for attr in ("nama_representative", "jabatan", "alamat"):
+                if is_placeholder(getattr(party, attr)) and hint.get(attr):
+                    setattr(party, attr, hint[attr])
+
+        # Pengecekan tertukar butuh petunjuk kedua pihak.
         if not (p1_hint and p2_hint):
             return
-        p1, p2 = extracted.pihak_pertama, extracted.pihak_kedua
-
         if (
             p1.alamat
             and p1.alamat == p2.alamat
@@ -778,11 +814,6 @@ class OllamaExtractor:
                     p1_hint["nama_perusahaan"],
                     p2_hint["nama_perusahaan"],
                 )
-
-        for party, hint in ((p1, p1_hint), (p2, p2_hint)):
-            for attr in ("nama_representative", "jabatan"):
-                if is_placeholder(getattr(party, attr)) and hint.get(attr):
-                    setattr(party, attr, hint[attr])
 
     def extract_sph(self, markdown_text: str) -> SPHExtractionSchema:
         extracted: SPHExtractionSchema = self._run_extraction(

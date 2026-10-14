@@ -1,5 +1,5 @@
 """
-Open ADE — Rule & cross-field validation (Plan §15).
+Open ADE: Rule & cross-field validation (Plan §15).
 
 Pydantic hanya menjamin tipe/struktur. Modul ini memeriksa apakah nilainya masuk akal
 secara bisnis: total = subtotal + PPN, terbilang = total, jumlah item = subtotal, dst.
@@ -14,7 +14,7 @@ from app.extractors.deterministic.dates import find_dates, parse_id_date
 from app.extractors.deterministic.numbers import amounts_equal, parse_id_number, terbilang_to_number
 from app.schemas.evidence import Severity, ValidationIssue, ValidationReport
 
-RULE_VERSION = "rules-2026.09.3"
+RULE_VERSION = "rules-2026.10.1"
 # Toleransi absolut untuk selisih pembulatan PPN/harga satuan. Toleransi relatif (0.5%) sempat
 # dicoba tapi meloloskan terbilang yang salah ~Rp824 ribu pada nilai kontrak Rp174 juta.
 ROUNDING_TOLERANCE = 1000.0
@@ -254,6 +254,39 @@ def _check_parties_distinct(
                 [f"{p1_key}.{key}", f"{p2_key}.{key}"],
                 f"{key} {p1_key} dan {p2_key} identik (kemungkinan tertukar/tersalin)",
             )
+    # Wakil yang sama untuk dua pihak. Kasus nyata: blok tanda tangan dua kolom diratakan OCR dan
+    # LLM memasang penandatangan Pihak Kedua (namanya rusak, "BUDIA" untuk "Budi ...") ke Pihak
+    # Pertama. Nama tidak pernah identik karena salah baca, jadi dibandingkan kemiripan kata
+    # pertamanya, dan hanya bila jabatannya juga sama (dua direktur berbeda itu wajar).
+    r1, r2 = (
+        (p1.get("Nama Representative") or "").strip(),
+        (p2.get("Nama Representative") or "").strip(),
+    )
+    j1, j2 = (p1.get("Jabatan") or "").strip().lower(), (p2.get("Jabatan") or "").strip().lower()
+    if r1 and r2 and j1 and j1 == j2 and _nama_mirip(r1, r2):
+        c.add(
+            "parties_distinct",
+            Severity.WARNING,
+            [
+                f"{p1_key}.Nama Representative",
+                f"{p1_key}.Jabatan",
+                f"{p2_key}.Nama Representative",
+                f"{p2_key}.Jabatan",
+            ],
+            f"Wakil {p1_key} dan {p2_key} tampak orang yang sama ({r1} / {r2}, jabatan "
+            f"{j1}). Cek blok tanda tangan: penandatangan kedua pihak mungkin tertukar.",
+        )
+
+
+def _nama_mirip(a: str, b: str) -> bool:
+    from difflib import SequenceMatcher
+
+    k1, k2 = a.lower().split()[0], b.lower().split()[0]
+    return (
+        SequenceMatcher(None, k1, k2).ratio() >= 0.8
+        or a.lower() in b.lower()
+        or b.lower() in a.lower()
+    )
 
 
 def _check_field_date_order(
@@ -404,6 +437,62 @@ def note_duplicate_pages(report: ValidationReport, duplicate_pages: list[int]) -
             f"mengulang halaman sebelumnya dan tidak ikut diekstrak. Pastikan isinya memang "
             f"sama (bukan revisi).",
             actual=duplicate_pages,
+        )
+    return c.report()
+
+
+def note_hidden_text(
+    report: ValidationReport, hidden: list[dict[str, Any]], dibuang: bool
+) -> ValidationReport:
+    """
+    Beri tahu PM bila PDF memuat teks yang tidak terlihat di halaman.
+
+    Kasus nyata: SPH vendor dengan baris PPN dan total yang ditimpa kotak putih. Tanpa
+    peringatan ini PM melihat "Total Harga" di PDF, sementara sistem mengisi Grand Total
+    dengan angka dari baris yang tidak tampak.
+    """
+    c = _Checker()
+    c.issues, c.checked = list(report.issues), list(report.checked_rules)
+    c.rule("teks_tersembunyi")
+    if hidden:
+        halaman = sorted({h["page"] for h in hidden})
+        contoh = "; ".join(dict.fromkeys(h["text"] for h in hidden))
+        if len(contoh) > 160:
+            contoh = contoh[:157] + "..."
+        akibat = (
+            "Teks itu tidak ikut dibaca AI."
+            if dibuang
+            else "Teks itu menumpuk dengan teks yang terlihat, jadi tetap ikut dibaca AI."
+        )
+        c.add(
+            "teks_tersembunyi",
+            Severity.WARNING,
+            [],
+            f"PDF memuat teks yang tidak terlihat di halaman {', '.join(map(str, halaman))} "
+            f'(tertutup kotak atau gambar, atau warnanya sama dengan latar): "{contoh}". '
+            f"{akibat} Cocokkan dengan tampilan PDF dan tanyakan ke pengirim bila angkanya "
+            f"menyangkut harga.",
+            actual=hidden[:20],
+        )
+    return c.report()
+
+
+def note_second_ocr(report: ValidationReport, berbeda: list[dict[str, Any]]) -> ValidationReport:
+    """Alasan per field untuk identifier yang dibaca berbeda oleh OCR kedua (lihat
+    app/evidence/locator.py, verify_identifiers_second_ocr)."""
+    c = _Checker()
+    c.issues, c.checked = list(report.issues), list(report.checked_rules)
+    c.rule("ocr_kedua")
+    for b in berbeda:
+        bacaan = f': "{b["bacaan"]}"' if b.get("bacaan") else " tidak menemukan nilai ini"
+        c.add(
+            "ocr_kedua_berbeda",
+            Severity.WARNING,
+            [b["field"]],
+            f"Bacaan kedua (Tesseract) di halaman {b['page']} berbeda{bacaan}. "
+            f"Cocokkan tanda baca dan angkanya dengan PDF.",
+            expected=b.get("bacaan"),
+            actual=b.get("value"),
         )
     return c.report()
 

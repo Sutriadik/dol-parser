@@ -1,9 +1,9 @@
 """
-Open ADE — Context Analyzer (deterministic pre-processor sebelum LLM).
+Open ADE: Context Analyzer (deterministic pre-processor sebelum LLM).
 
-1. Section Detection — mendeteksi pasal-pasal dokumen kontrak/SPH
-2. Key Entity Pre-extraction — regex berbasis konteks (satu kandidat terbaik per field)
-3. Context Enrichment — annotation [SECTION:] / [KEY:] untuk membantu LLM kecil
+1. Section Detection: mendeteksi pasal-pasal dokumen kontrak/SPH
+2. Key Entity Pre-extraction: regex berbasis konteks (satu kandidat terbaik per field)
+3. Context Enrichment: annotation [SECTION:] / [KEY:] untuk membantu LLM kecil
 
 Perbaikan dari versi sebelumnya:
 - Pola lama "No.\\s*(\\d+)" menangkap "No. 1" di alamat sebagai nomor rekening, "a.n PT" menjadi
@@ -89,6 +89,9 @@ _ADDRESS_KEYWORDS = [
     "kota ",
     "kabupaten",
 ]
+# Kop surat: "Kepada Yth," / "Kepada Yth." / "Kepada Yang Terhormat" lalu isi satu baris.
+_KEPADA_YTH = re.compile(r"Kepada\s+Y(?:th|ang\s+Terhormat)\.?\s*[,:]?\s*(?P<isi>[^\n]+)", re.I)
+_BADAN_USAHA = re.compile(r"\b(?:PT|CV|Perum|Koperasi|Yayasan|UD|PD)\.?\s+[A-Z]")
 _BANK_STOP = r"(?!(?i:cabang|kcp|kc|unit|no|nomor|rekening|dengan|sebesar|atas)\b|a\.n)"
 
 # "Pihak Kesatu" adalah sinonim resmi "Pihak Pertama" yang umum dipakai di dokumen
@@ -298,7 +301,7 @@ class ContextAnalyzer:
                     put(self._entity(text, "Nama Pekerjaan", raw_job, m_job.start(), 0.85))
                     break
 
-        # "Dibuat di : Bandung" — nama kota berhuruf kapital, satu baris ("dibuat di hadapan
+        # "Dibuat di : Bandung": nama kota berhuruf kapital, satu baris ("dibuat di hadapan
         # Notaris" tidak ikut).
         closings = list(
             re.finditer(
@@ -398,6 +401,49 @@ class ContextAnalyzer:
             if p2_m:
                 parties["pihak_kedua"] = ContextAnalyzer._parse_kontrak_block(p2_m.group(1))
         return parties
+
+    @staticmethod
+    def parse_alamat_surat(markdown_text: str) -> dict[str, str]:
+        """
+        Penerima surat dari baris "Kepada Yth, <jabatan> <perusahaan> <alamat>" di kop surat.
+
+        Dipakai untuk dokumen perintah berbentuk surat (Nota Pesanan, SPK surat) yang tidak
+        punya preambule "selanjutnya disebut PIHAK KEDUA". Sengaja tidak masuk `parties`: di
+        SPH penerimanya klien, bukan penyedia, dan `enrich_markdown` akan memberinya label yang
+        salah di teks yang dibaca LLM.
+        """
+        text = html.unescape(markdown_text[:4000]).replace("**", "")
+        m = _KEPADA_YTH.search(text)
+        if not m:
+            return {}
+        # OCR sering menggabungkan baris kop berikutnya ke baris penerima.
+        isi = re.split(r"\b(?:Perihal|Lampiran|Hal|Nomor)\s*:|\bDengan\s+hormat", m.group("isi"))[0]
+        isi = isi.strip(" ;,:")
+        badan = _BADAN_USAHA.search(isi)
+        if not badan:
+            return {}
+        sebelum, sisa = isi[: badan.start()].strip(" ,"), isi[badan.start() :]
+        # Sebelum nama perusahaan hanya ada nama penerima dan/atau jabatan. Angka di sana berarti
+        # yang terbaca adalah alamat perorangan, bukan "jabatan + perusahaan".
+        if re.search(r"\d", sebelum) or len(sebelum.split()) > 8:
+            return {}
+        jalan = re.search(r"\b(?:Jl\.|Jln\.?|JI\.|Jalan)\s", sisa)
+        info: dict[str, str] = {}
+        nama, _, jabatan = sebelum.rpartition(",") if "," in sebelum else ("", "", sebelum)
+        sapaan = re.match(r"^(?:Bapak|Ibu|Bpk\.?|Sdr\.?i?|Saudara(?:i)?)\s+", sebelum, re.I)
+        if sapaan and not nama:
+            nama, jabatan = sebelum, ""
+        nama = re.sub(
+            r"^(?:Bapak|Ibu|Bpk\.?|Sdr\.?i?|Saudara(?:i)?)\s+", "", nama.strip(), flags=re.I
+        )
+        if nama:
+            info["nama_representative"] = nama.strip(" ,")
+        if jabatan.strip(" ,"):
+            info["jabatan"] = jabatan.strip(" ,")
+        info["nama_perusahaan"] = (sisa[: jalan.start()] if jalan else sisa).strip(" ,")
+        if jalan:
+            info["alamat"] = sisa[jalan.start() :].strip(" ,")
+        return info
 
     @staticmethod
     def _parse_labeled_block(block: str) -> dict[str, str]:

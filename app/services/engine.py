@@ -1,5 +1,5 @@
 """
-Open ADE — Engine Orchestrator.
+Open ADE: Engine Orchestrator.
 
 Profile → Parse (routed) → Document IR → Classify → Extract → Validate → Evidence → Output.
 
@@ -9,6 +9,7 @@ durasi per tahap) supaya perubahan akurasi bisa ditelusuri sumbernya (Plan §26�
 
 import json
 import re
+import tempfile
 import time
 import uuid
 from collections import Counter
@@ -19,9 +20,9 @@ from typing import Any
 from app.config import config
 from app.document_ir.adapter import content_hash, from_parsed_response
 from app.document_ir.models import DocumentIR
-from app.evidence.locator import build_field_evidence
+from app.evidence.locator import build_field_evidence, verify_identifiers_second_ocr
 from app.extractors.prompts import PROMPT_VERSION
-from app.ingestion.profiler import DocumentProfile, profile_document
+from app.ingestion.profiler import DocumentProfile, profile_document, strip_hidden_text
 from app.logger import logger
 from app.schemas.bast import BASTExtractionSchema
 from app.schemas.common import BoundingBox, FieldVisualGrounding, LandingAIParsedResponse
@@ -34,6 +35,8 @@ from app.validation.rules import (
     RULE_VERSION,
     check_amounts_grounded,
     note_duplicate_pages,
+    note_hidden_text,
+    note_second_ocr,
     validate_extraction,
 )
 
@@ -139,22 +142,43 @@ class OpenADEEngine:
             needs_ocr = path.suffix.lower() in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 
         selected = (ocr or config.OCR_ENGINE).lower()
+        hidden = profile.hidden_text if profile is not None else []
 
         started = time.time()
-        if selected == "paddle":
-            parsed = self.paddle_parser.parse(pdf_path, max_pages=max_pages)
-        else:
-            # "auto" dari pemanggil berarti "terserah server": Docling membaca OCR_ENGINE.
-            docling_ocr = None if selected == "auto" else selected
-            try:
-                parsed = self.docling_parser.parse(
-                    pdf_path, do_ocr=needs_ocr, max_pages=max_pages, ocr_engine=docling_ocr
+        with tempfile.TemporaryDirectory(prefix="dol-bersih-") as tmp:
+            # Parser membaca salinan tanpa teks yang tidak terlihat, supaya nilai yang diekstrak
+            # sama dengan yang dilihat PM di PDF. Nama berkasnya dipertahankan.
+            parse_path, dibuang = pdf_path, False
+            if hidden:
+                bersih = str(Path(tmp) / path.name)
+                try:
+                    dibuang = strip_hidden_text(pdf_path, hidden, bersih)
+                except Exception as e:
+                    logger.warning(f"{path.name}: salinan tanpa teks tersembunyi gagal dibuat: {e}")
+                if dibuang:
+                    parse_path = bersih
+                logger.warning(
+                    f"{path.name}: {len(hidden)} potong teks tidak terlihat di halaman "
+                    f"{sorted({h['page'] for h in hidden})}"
+                    + ("; dibuang sebelum parsing" if dibuang else "; tidak bisa dipisahkan")
                 )
-            except Exception as e:
-                raise ParsingError(
-                    f"Docling gagal membaca {path.name} (ocr={selected}): {e}. "
-                    'Mesin lain tidak dicoba otomatis; minta lewat ocr= (mis. "paddle").'
-                ) from e
+
+            if selected == "paddle":
+                parsed = self.paddle_parser.parse(parse_path, max_pages=max_pages)
+            else:
+                # "auto" dari pemanggil berarti "terserah server": Docling membaca OCR_ENGINE.
+                docling_ocr = None if selected == "auto" else selected
+                try:
+                    parsed = self.docling_parser.parse(
+                        parse_path, do_ocr=needs_ocr, max_pages=max_pages, ocr_engine=docling_ocr
+                    )
+                except Exception as e:
+                    raise ParsingError(
+                        f"Docling gagal membaca {path.name} (ocr={selected}): {e}. "
+                        'Mesin lain tidak dicoba otomatis; minta lewat ocr= (mis. "paddle").'
+                    ) from e
+        parsed.metadata.teks_tersembunyi = hidden
+        parsed.metadata.teks_tersembunyi_dibuang = dibuang
 
         # Poles teks markdown (reparasi typo / teks rumpang OCR & format tabel LaTeX-grade)
         if config.ENABLE_LLM_MARKDOWN_REFINER:
@@ -351,8 +375,15 @@ class OpenADEEngine:
         t = time.time()
         validation = validate_extraction(detected_type, data)
         evidence = build_field_evidence(data, ir, validation, min_score=config.GROUNDING_MIN_SCORE)
+        evidence, ocr_berbeda, ocr_kedua = verify_identifiers_second_ocr(
+            evidence, pdf_path, profile.ocr_pages if profile else []
+        )
+        validation = note_second_ocr(validation, ocr_berbeda)
         validation = check_amounts_grounded(validation, detected_type, evidence)
         validation = note_duplicate_pages(validation, duplicate_pages)
+        validation = note_hidden_text(
+            validation, parsed.metadata.teks_tersembunyi, parsed.metadata.teks_tersembunyi_dibuang
+        )
         timings["validate_and_ground_s"] = round(time.time() - t, 2)
         quality_report = self.build_quality_report(evidence, validation)
         timings["total_s"] = round(time.time() - t0, 2)
@@ -372,6 +403,8 @@ class OpenADEEngine:
             # Laporan mutu dari mesin pembaca; masuk NocoDB sebagai "Mutu Pembacaan".
             "parse_quality": parsed.metadata.mutu_pembacaan,
             "duplicate_pages": duplicate_pages,
+            # Bacaan kedua identifier di halaman scan: {"mesin", "diperiksa", "berbeda"}.
+            "ocr_kedua": ocr_kedua,
             "block_count": ir.block_count,
             "llm_calls": self.extractor.llm_calls,
             "llm_seconds": round(self.extractor.llm_seconds, 1),

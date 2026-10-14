@@ -1,5 +1,5 @@
 """
-Open ADE — Evidence locator (Plan §5.1, §14, §17, §25).
+Open ADE: Evidence locator (Plan §5.1, §14, §17, §25).
 
 Mencari evidence setiap field di DocumentIR, lalu menggabungkannya dengan hasil
 validasi menjadi FieldEvidence berstatus (AUTO_VERIFIED / REVIEW_REQUIRED / ...).
@@ -15,6 +15,7 @@ from typing import Any
 from app.document_ir.models import BBox, DocumentIR, union_bbox
 from app.evidence.matcher import calculate_match_confidence, canon, is_numeric_query
 from app.extractors.deterministic.numbers import format_number_for_matching
+from app.logger import logger
 from app.schemas.common import BoundingBox
 from app.schemas.evidence import FieldEvidence, FieldStatus, Severity, ValidationReport
 
@@ -40,7 +41,7 @@ MULTI_BLOCK_PENALTY = 0.03  # gabungan blok hanya menang jika jelas lebih baik d
 VERIFIED_MIN_SCORE = 0.85
 MIN_SCORE_DEFAULT = 0.65
 
-# Bobot sementara — wajib dikalibrasi ulang dengan golden dataset (Plan §17).
+# Bobot sementara, wajib dikalibrasi ulang dengan golden dataset (Plan §17).
 W_EVIDENCE, W_SOURCE, W_RULES = 0.60, 0.15, 0.25
 
 
@@ -217,3 +218,127 @@ def build_field_evidence(
             )
         )
     return results
+
+
+# Bacaan kedua untuk identifier di halaman scan. Grounding mencocokkan nilai ke teks OCR yang
+# sama dengan yang dibaca LLM, jadi salah baca OCR selalu "terbukti" oleh dirinya sendiri.
+# Kasus nyata: nomor kontrak Nota Pesanan terbaca tanpa satu titik dan tetap berstatus
+# bukti_kuat. Tesseract membaca ulang potongan gambarnya; ini verifikasi, bukan mesin cadangan,
+# jadi nilai tidak pernah diganti, hanya statusnya yang turun.
+#
+# Nominal sengaja tidak ikut: pada uji kontrak scan 14 halaman, 4 dari 10 harga satuan yang
+# benar ikut ditandai karena Tesseract membaca tabel bergaris dengan buruk. Nominal sudah dijaga
+# aturan aritmetika dan terbilang.
+SECOND_OCR_FIELD_KEYS = ("Nomor", "NPWP", "Rekening")
+SECOND_OCR_SKIP_KEYS = ("Nomor Item", "Nomor Pasal", "Nomor Urut")
+SECOND_OCR_MAX_CONFIDENCE = 0.6  # di bawah ambang bukti_cukup, supaya naik di antrean PM
+SECOND_OCR_LANG = "ind+eng"
+SECOND_OCR_DPI = 300
+SECOND_OCR_PAD = 0.01  # tambahan tepi potongan, pecahan lebar/tinggi halaman
+
+
+def _tesseract_tersedia() -> bool:
+    import shutil
+
+    return shutil.which("tesseract") is not None
+
+
+def _baca_potongan(pdf_path: str, page: int, bbox: BoundingBox) -> str:
+    import subprocess
+    import tempfile
+
+    import pymupdf
+
+    with pymupdf.open(pdf_path) as doc:
+        halaman = doc[page - 1]
+        w, h = halaman.rect.width, halaman.rect.height
+        clip = (
+            pymupdf.Rect(
+                (bbox.xmin - SECOND_OCR_PAD) * w,
+                (bbox.ymin - SECOND_OCR_PAD) * h,
+                (bbox.xmax + SECOND_OCR_PAD) * w,
+                (bbox.ymax + SECOND_OCR_PAD) * h,
+            )
+            & halaman.rect
+        )
+        pix = halaman.get_pixmap(dpi=SECOND_OCR_DPI, clip=clip, colorspace=pymupdf.csGRAY)
+    with tempfile.NamedTemporaryFile(suffix=".png") as gambar:
+        pix.save(gambar.name)
+        hasil = subprocess.run(
+            ["tesseract", gambar.name, "stdout", "-l", SECOND_OCR_LANG, "--psm", "6"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    return hasil.stdout
+
+
+def _perlu_bacaan_kedua(ev: FieldEvidence, ocr_pages: set[int]) -> bool:
+    return (
+        ev.status in (FieldStatus.AUTO_VERIFIED, FieldStatus.AUTO_ACCEPTED)
+        and ev.page in ocr_pages
+        and ev.bbox is not None
+        and isinstance(ev.value, str)
+        and any(k in ev.field for k in SECOND_OCR_FIELD_KEYS)
+        and not any(k in ev.field for k in SECOND_OCR_SKIP_KEYS)
+    )
+
+
+def _tanpa_spasi(teks: str) -> str:
+    return "".join(str(teks).split()).upper()
+
+
+def _baris_terdekat(bacaan: str, value: str) -> str:
+    """Baris bacaan Tesseract yang paling mirip nilai, untuk ditunjukkan ke PM."""
+    from difflib import SequenceMatcher
+
+    baris = [b.strip() for b in bacaan.splitlines() if b.strip()]
+    if not baris:
+        return ""
+    return max(
+        baris, key=lambda b: SequenceMatcher(None, _tanpa_spasi(b), _tanpa_spasi(value)).ratio()
+    )
+
+
+def verify_identifiers_second_ocr(
+    evidence: list[FieldEvidence], pdf_path: str, ocr_pages: Iterable[int]
+) -> tuple[list[FieldEvidence], list[dict[str, Any]], dict[str, Any]]:
+    """
+    Baca ulang identifier berstatus bukti_kuat/bukti_cukup di halaman scan dengan Tesseract.
+
+    Kembali: (evidence yang sama dengan status diperbarui, daftar yang berbeda, ringkasan untuk
+    run_info). Tanpa biner tesseract tidak ada yang berubah dan ringkasan menyebutnya.
+    """
+    halaman_scan = set(ocr_pages)
+    calon = [ev for ev in evidence if _perlu_bacaan_kedua(ev, halaman_scan)]
+    if not calon:
+        return evidence, [], {"mesin": "tesseract", "diperiksa": 0, "berbeda": 0}
+    if not _tesseract_tersedia():
+        return evidence, [], {"mesin": None, "diperiksa": 0, "alasan": "tesseract tidak terpasang"}
+
+    berbeda: list[dict[str, Any]] = []
+    galat = 0
+    for ev in calon:
+        try:
+            bacaan = _baca_potongan(pdf_path, ev.page, ev.bbox)
+        except Exception as e:  # Tesseract macet/timeout tidak boleh menggagalkan dokumen
+            galat += 1
+            logger.warning(f"Bacaan kedua {ev.field} dilewati: {e}")
+            continue
+        if _tanpa_spasi(ev.value) in _tanpa_spasi(bacaan):
+            continue
+        ev.status = FieldStatus.REVIEW_REQUIRED
+        ev.confidence = min(ev.confidence, SECOND_OCR_MAX_CONFIDENCE)
+        ev.issues = [*ev.issues, "ocr_kedua_berbeda"]
+        berbeda.append(
+            {
+                "field": ev.field,
+                "value": ev.value,
+                "page": ev.page,
+                "bacaan": _baris_terdekat(bacaan, ev.value)[:160],
+            }
+        )
+    ringkas = {"mesin": "tesseract", "diperiksa": len(calon) - galat, "berbeda": len(berbeda)}
+    if galat:
+        ringkas["galat"] = galat
+    return evidence, berbeda, ringkas

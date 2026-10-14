@@ -73,10 +73,16 @@ class ParseMetadata(BaseModel):
     # {"rata_rata": "good", "terendah": "fair", "skor_layout": .., "skor_ocr": .., "skor_teks": ..}.
     # None = mesin tidak melaporkannya (jalur PaddleOCR, atau Docling sebelum 2.34).
     mutu_pembacaan: dict[str, Any] | None = None
+    # Teks di lapisan PDF yang tidak tergambar di halaman (app/ingestion/profiler.py):
+    # [{"page": 1, "bbox": [x0, y0, x1, y1], "text": "PPN 11%"}], bbox dalam poin PDF.
+    # `teks_tersembunyi_dibuang` False berarti teks itu tetap ikut terbaca parser.
+    teks_tersembunyi: list[dict[str, Any]] = []
+    teks_tersembunyi_dibuang: bool = False
 
 
 class LandingAIParsedResponse(BaseModel):
-    """Exact 1-to-1 schema compatibility with LandingAI ADE Parse output"""
+    """Bentuk respons parse. Meniru Parse Landing AI ADE (markdown, metadata, structure), tetapi
+    tidak identik dengan kontrak v2 mereka."""
 
     markdown: str
     metadata: ParseMetadata
