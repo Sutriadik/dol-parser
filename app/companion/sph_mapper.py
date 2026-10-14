@@ -1,5 +1,5 @@
 """
-Open ADE — Pemeta hasil ekstraksi SPH (Surat Penawaran Harga) -> baris tabel companion.
+Open ADE: Pemeta hasil ekstraksi SPH (Surat Penawaran Harga) -> baris tabel companion.
 
 Masukan: isi `*.extract.json` jenis SPH (lihat app/schemas/sph.py untuk nama aliasnya).
 Keluaran: {nama_tabel: [baris, ...]} sesuai dol_schema.

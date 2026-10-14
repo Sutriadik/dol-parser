@@ -1,5 +1,5 @@
 """
-Open ADE — Evidence & validation schemas (Plan §14, §15, §25).
+Open ADE: Evidence & validation schemas (Plan §14, §15, §25).
 """
 
 from enum import Enum

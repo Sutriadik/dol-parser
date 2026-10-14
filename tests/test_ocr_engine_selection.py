@@ -4,7 +4,7 @@ Tests untuk pemilihan engine OCR (app/parsers/docling_parser.py).
 Dulu pemilihan engine dibungkus try/except tanpa nilai default: di macOS terpilih Apple
 Vision, di Linux exception-nya ditelan dan Docling diam-diam memakai engine lain. Tes ini
 menjaga agar perilaku "gagal terang-terangan" tidak tanpa sengaja dikembalikan jadi
-"mundur diam-diam" — kesalahan yang baru ketahuan saat dokumen produksi salah terbaca.
+"mundur diam-diam", kesalahan yang baru ketahuan saat dokumen produksi salah terbaca.
 """
 
 import importlib.util
@@ -34,7 +34,7 @@ def set_engine(monkeypatch):
 
 
 def test_auto_memilih_apple_vision_di_macos(set_engine, monkeypatch):
-    """Di Mac, default harus tetap Apple Vision — ini yang menghasilkan output saat ini."""
+    """Di Mac, default harus tetap Apple Vision, karena ini yang menghasilkan output saat ini."""
     if sys.platform != "darwin":
         pytest.skip("hanya relevan di macOS")
     set_engine("auto")
@@ -58,7 +58,7 @@ def test_engine_tidak_dikenal_ditolak(set_engine):
 
 def test_engine_eksplisit_tidak_pernah_mundur_diam_diam(set_engine, monkeypatch):
     """
-    Kalau engine diminta eksplisit tapi tidak bisa dimuat, harus RuntimeError —
+    Kalau engine diminta eksplisit tapi tidak bisa dimuat, harus RuntimeError,
     bukan diam-diam memakai engine lain.
     """
     set_engine("tesseract")

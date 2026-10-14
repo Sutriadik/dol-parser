@@ -1,4 +1,4 @@
-# dol-parser — image service (API + mesin OCR) untuk Linux/Windows-WSL2.
+# dol-parser: image service (API + mesin OCR) untuk Linux/Windows-WSL2.
 #
 # Skema dol-schema (folder sejajar) masuk lewat konteks build bernama, supaya konteks
 # utama tetap folder ini saja. Lewat docker compose sudah otomatis (additional_contexts).

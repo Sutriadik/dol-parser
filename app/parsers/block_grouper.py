@@ -1,8 +1,8 @@
 """
-Open ADE — Block grouping & semantic annotation (layout awareness, layer 2).
+Open ADE: Block grouping & semantic annotation (layout awareness, layer 2).
 
 Docling sudah memberi label layout asli per elemen (section_header, caption, list_item, dst.)
-dan deteksi gambar (doc.pictures) — tapi mengubahnya jadi StructureItem satu-lawan-satu
+dan deteksi gambar (doc.pictures), tapi mengubahnya jadi StructureItem satu-lawan-satu
 menghasilkan puluhan blok kecil per halaman (tiap baris = satu blok), jauh lebih berisik
 dibanding LandingAI yang mengelompokkan baris-baris terkait jadi satu unit semantik
 (mis. blok "Nama/Jabatan/Perusahaan" jadi satu "attestation").
@@ -12,17 +12,17 @@ menjalankan OCR: input & output berupa `DraftBlock` yang dipetakan ke StructureI
 pemanggilnya (docling_parser.py).
 
 Tiga langkah (urut dipanggil oleh `process_page_blocks`):
-0. `pair_labels_with_values` — pasangkan label form polos ("Nama", "Jabatan", "Tanggal", ..
+0. `pair_labels_with_values`: pasangkan label form polos ("Nama", "Jabatan", "Tanggal", ..
    tanpa titik dua) dengan nilainya (": Budi Santoso Wijaya") berdasarkan jarak-Y
    TERDEKAT, bukan urutan mentah dari Docling. Perlu ada langkah ini karena Docling kadang
    mengeluarkan seluruh kolom label dulu baru seluruh kolom nilai untuk layout 2 kolom
    semacam ini -- dan urutannya bisa tidak konsisten (label ketiga "Alamat" bisa muncul
    PALING TERAKHIR walau posisinya di atas baris lain), jadi urutan baca tidak bisa
    dipakai untuk menentukan pasangannya, hanya posisi fisik (Y) yang bisa diandalkan.
-1. `merge_adjacent_blocks` — gabungkan baris-baris berdekatan yang senada (judul+nomornya,
+1. `merge_adjacent_blocks`: gabungkan baris-baris berdekatan yang senada (judul+nomornya,
    atau paragraf/key-value/list yang berurutan tanpa jeda vertikal besar) jadi satu blok,
    dengan `atomic` menyimpan baris aslinya (setara `atomic_grounding` LandingAI).
-2. `annotate_attestation` — tandai blok tepat setelah judul berdiri sendiri "PIHAK
+2. `annotate_attestation`: tandai blok tepat setelah judul berdiri sendiri "PIHAK
    PERTAMA/KEDUA/KESATU" jadi tipe "attestation" (posisi, bukan isi teks -- nama+jabatan
    penandatangan asli biasanya polos TANPA label "Nama:"/"Jabatan:", beda dari blok
    Nama/Jabatan/Alamat berlabel di preamble yang bukan tanda tangan).

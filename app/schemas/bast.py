@@ -1,5 +1,5 @@
 """
-Open ADE — Schema: Berita Acara Serah Terima (BAST)
+Open ADE: Schema: Berita Acara Serah Terima (BAST)
 
 BAST adalah dokumen serah terima yang memicu penagihan (lihat Delivery Ops Layer briefing:
 "BAST Pelanggan yang menahan cashflow"). Berbeda dari Kontrak/SPH, tabel isinya biasanya

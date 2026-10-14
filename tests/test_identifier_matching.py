@@ -2,7 +2,7 @@
 Tes pencocokan & normalisasi identifier (nomor dokumen, rekening, NPWP).
 
 Kenapa lapisan ini dites terpisah: nomor kontrak adalah field paling kritis di dokumen
-pengadaan — salah satu karakter membuat BAST ditolak dan tagihan tertahan — sekaligus yang
+pengadaan (salah satu karakter membuat BAST ditolak dan tagihan tertahan), sekaligus yang
 paling sering dirusak OCR. Dua kegagalan nyata yang memicu kode ini, dari
 `eval/reports/baseline_akurasi_2026-09-25.json`:
 
@@ -271,7 +271,7 @@ NO_TELKOM, NO_BUT = "K.TEL.012345/HK.810/T1R-0D000000/2025", "77/00/HK-08/BUT/20
 def test_dua_nomor_kontrak_tertukar_dikembalikan_ke_peran_benar():
     """
     Kasus nyata dari sebuah kontrak layanan: model memasang nomor BUT sebagai nomor kontrak
-    utama dan nomor Telkom sebagai nomor internal — terbalik. Penentunya ada di nomornya
+    utama dan nomor Telkom sebagai nomor internal, terbalik. Penentunya ada di nomornya
     sendiri: penyedia menyelipkan akronim perusahaannya ("BUT").
     """
     assert fix_contract_number_roles(NO_BUT, NO_TELKOM, TELKOM, BUT) == (NO_TELKOM, NO_BUT)

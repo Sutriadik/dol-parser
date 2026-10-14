@@ -1,5 +1,5 @@
 """
-Open ADE — Merapikan bentuk permintaan & keluaran LLM, tanpa memanggil LLM.
+Open ADE: Merapikan bentuk permintaan & keluaran LLM, tanpa memanggil LLM.
 
 Fungsi murni: batas panjang di skema JSON yang dikirim ke Ollama, pembuang deret angka
 sisa perulangan model, pengenal nilai placeholder, dan hasil kosong yang tetap valid.

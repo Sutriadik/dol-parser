@@ -1,5 +1,5 @@
 """
-Open ADE — Image Quality Enhancement Layer
+Open ADE: Image Quality Enhancement Layer
 Modul preprocessing citra dokumen scanned & image-based PDF:
 1. Adaptive Deskewing (Koreksi kemiringan teks)
 2. Shadow & Lighting Normalization (Penghapusan bayangan dan gradien pencahayaan)

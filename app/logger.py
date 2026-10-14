@@ -1,5 +1,5 @@
 """
-Open ADE — Centralized Logging Module
+Open ADE: Centralized Logging Module
 Menggantikan print() statements dengan proper logging framework.
 """
 

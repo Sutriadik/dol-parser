@@ -1,7 +1,7 @@
 """
 Tes endpoint yang dipanggil n8n: autentikasi, batas unggahan, dan siklus hidup job.
 
-Engine berat (Docling/Ollama) tidak pernah dipanggil di sini — runner antrian diganti
+Engine berat (Docling/Ollama) tidak pernah dipanggil di sini; runner antrian diganti
 boneka. Yang diuji adalah kontrak HTTP-nya, karena itu yang dipegang n8n.
 """
 

@@ -1,5 +1,5 @@
 """
-Open ADE — Normalisasi identifier (nomor dokumen, rekening, NPWP).
+Open ADE: Normalisasi identifier (nomor dokumen, rekening, NPWP).
 
 Masalah yang ditangani. Nomor kontrak adalah field paling kritis di dokumen pengadaan:
 salah satu karakter saja membuat BAST ditolak dan tagihan tertahan. Tetapi justru nomor
@@ -12,7 +12,7 @@ huruf besar dan angka:
 Modul ini hanya membuang spasi yang MENEMPEL pada pemisah (titik, garis miring, strip).
 Sengaja sesempit itu: spasi yang berdiri sendiri di antara dua kata bisa saja memang
 bagian dari nomornya ("SPK 45/2026"), jadi tidak disentuh. Aturan yang lebih longgar
-akan "memperbaiki" nomor yang sebenarnya sudah benar — dan kesalahan seperti itu tidak
+akan "memperbaiki" nomor yang sebenarnya sudah benar, dan kesalahan seperti itu tidak
 ketahuan sampai BAST ditolak.
 
 Yang TIDAK dilakukan modul ini: menukar karakter yang mirip (O/0, I/1). Menyamakan
@@ -115,7 +115,7 @@ def _segmen(nomor: str | None) -> set:
 
 
 def _milik_siapa(nomor: str | None, penanda_p1: set, penanda_p2: set) -> str | None:
-    """'pertama' | 'kedua' | None — hanya menjawab bila sinyalnya tidak ambigu."""
+    """'pertama' | 'kedua' | None. Hanya menjawab bila sinyalnya tidak ambigu."""
     seg = _segmen(nomor)
     if not seg:
         return None
@@ -154,7 +154,7 @@ def fix_contract_number_roles(
     membiarkannya salah -- yang salah masih tertangkap konfirmasi per-field PM, yang
     tertukar diam-diam karena tebakan kita tidak.
 
-    Mengembalikan (nomor_kontrak, nomor_internal) — sudah dalam urutan yang benar.
+    Mengembalikan (nomor_kontrak, nomor_internal), sudah dalam urutan yang benar.
     """
     if not nomor_kontrak or not nomor_internal or nomor_kontrak == nomor_internal:
         return nomor_kontrak, nomor_internal

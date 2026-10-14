@@ -1,5 +1,5 @@
 """
-Open ADE — Kirim payload companion ke NocoDB.
+Open ADE: Kirim payload companion ke NocoDB.
 
 Model companion memakai foreign key berupa ID BARIS sungguhan, yang baru diketahui SETELAH
 baris induknya masuk. Jadi modul ini:

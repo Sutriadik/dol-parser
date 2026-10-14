@@ -1,5 +1,5 @@
 """
-Open ADE — Pemeta hasil ekstraksi Kontrak / SPK / PKS -> baris tabel companion (dol_schema).
+Open ADE: Pemeta hasil ekstraksi Kontrak / SPK / PKS -> baris tabel companion (dol_schema).
 
 Masukan: isi `*.extract.json` (atau hasil `OpenADEEngine.process_full` jenis kontrak).
 Keluaran: {nama_tabel: [baris, ...]} untuk tabel kontrak yang BERLAKU: document, contract,

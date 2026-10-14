@@ -1,5 +1,5 @@
 """
-Open ADE — Docling Parser (v4: native layout labels + picture detection + block grouping)
+Open ADE: Docling Parser (v4: native layout labels + picture detection + block grouping)
 
 - PDF digital: Docling tanpa OCR (layout + TableFormer saja).
 - PDF scan / mixed: Docling dengan OCR.
@@ -139,7 +139,7 @@ def _resolve_ocr_engine(requested: str | None = None) -> _OcrEngine:
 
     Sebelumnya pemilihan engine dibungkus try/except tanpa nilai default: di macOS
     terpilih Apple Vision, di Linux exception-nya ditelan dan Docling diam-diam memakai
-    engine lain. Hasil di laptop dan di server jadi berbeda tanpa ada yang tahu — persis
+    engine lain. Hasil di laptop dan di server jadi berbeda tanpa ada yang tahu, persis
     jenis kesalahan yang baru ketahuan saat dokumen produksi salah terbaca.
 
     Nilai eksplisit (`mac`, `tesseract`, `rapidocr`) GAGAL TERANG-TERANGAN

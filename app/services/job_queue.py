@@ -1,5 +1,5 @@
 """
-Open ADE — Antrian job asinkron untuk pemanggilan dari n8n.
+Open ADE: Antrian job asinkron untuk pemanggilan dari n8n.
 
 **Kenapa ini ada.** Benchmark di `storage/outputs/bench/_hasil/_ringkasan.json` mencatat
 162-313 detik per dokumen (OCR + 2-3 panggilan LLM). Node HTTP Request di n8n punya timeout
@@ -75,7 +75,7 @@ class Job:
     nocodb_push: str | None = None  # "ok" / "gagal: <sebab>"; None bila push tidak diminta
 
     def summary(self) -> dict[str, Any]:
-        """Status tanpa hasil — ini yang dipoll n8n; hasil penuhnya bisa puluhan MB."""
+        """Status tanpa hasil. Ini yang dipoll n8n; hasil penuhnya bisa puluhan MB."""
         return {
             "job_id": self.job_id,
             "document_id": self.document_id,
@@ -96,7 +96,7 @@ class JobQueue:
     Antrian FIFO dengan satu worker thread.
 
     `runner` disuntikkan (bukan meng-import engine langsung) supaya modul ini bisa diuji
-    tanpa memuat Docling/Ollama — memuat keduanya butuh belasan detik dan ratusan MB.
+    tanpa memuat Docling/Ollama, karena memuat keduanya butuh belasan detik dan ratusan MB.
     """
 
     def __init__(
@@ -173,7 +173,7 @@ class JobQueue:
                     self._jobs.pop(jid, None)
                     break
             else:
-                return  # semua masih antre/berjalan — jangan buang apa pun
+                return  # semua masih antre/berjalan, jangan buang apa pun
 
     def _loop(self) -> None:
         while True:

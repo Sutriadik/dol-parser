@@ -1,5 +1,5 @@
 """
-Open ADE — LLM Extraction Prompts
+Open ADE: LLM Extraction Prompts
 Dioptimalkan untuk Qwen 2.5:7b dengan few-shot examples dan instruksi yang tegas.
 
 PENTING: contoh few-shot memakai DATA FIKTIF. Versi sebelumnya memakai nilai asli dokumen

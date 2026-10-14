@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Open ADE — runner dokumen tunggal.
+Open ADE: runner dokumen tunggal.
 
     .venv311/bin/python run.py "path/ke/dokumen.pdf"
 

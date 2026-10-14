@@ -1,6 +1,6 @@
 """
 Unit tests untuk Document Classifier (rule-based fast classification only).
-Tidak membutuhkan Ollama/LLM — hanya test rule-based logic.
+Tidak membutuhkan Ollama/LLM, hanya test rule-based logic.
 """
 
 import os

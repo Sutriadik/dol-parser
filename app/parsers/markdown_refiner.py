@@ -1,11 +1,11 @@
 """
-Open ADE — LLM-Powered Markdown Refiner (Qwen 2.5)
+Open ADE: perbaikan markdown dengan LLM (Qwen 2.5)
 
 Modul pasca-parsing yang memanfaatkan penalaran LLM Qwen 2.5 untuk mereparasi
 kerusakan OCR yang parah (misal teks rumpang/hilang karakter "Ber aal ana ea..."),
 menyelaraskan hirarki heading, serta menjamin kerapian struktur tabel dan dokumen.
 
-Aturan Ketat (Factual & Integrity Guard):
+Batasan:
 - TIDAK BOLEH mengubah nominal angka, harga, persentase, tanggal, atau nomor kontrak.
 - TIDAK BOLEH merusak atau mengurangi baris/kolom tabel Markdown.
 - Menghilangkan noise/artefak stempel basah atau tanda tangan yang tersisa.
@@ -34,7 +34,7 @@ ATURAN WAJIB:
 
 # Potongan rusak yang benar-benar ditemui pada scan tinta pudar. Daftar ini sengaja
 # dipertahankan: ia bukan tebakan, melainkan sampel nyata yang bentuknya tidak tertangkap
-# aturan umum di bawah (mis. "menn aan mannan" — katanya panjang, tapi bukan kata).
+# aturan umum di bawah (mis. "menn aan mannan": katanya panjang, tapi bukan kata).
 POTONGAN_RUSAK_TERAMATI = (
     "ber aal ana",
     "ea a a",
@@ -95,8 +95,8 @@ def _detect_severe_ocr_corruption(text: str) -> bool:
     Dua lapis, dan urutannya disengaja: sampel yang teramati lebih dulu (murah, pasti),
     baru aturan umum.
 
-    Aturan umumnya mengukur SIFAT yang membuat teks itu rusak — deretan kata sangat pendek
-    yang beruntun — bukan mencocokkan kata pemicu tertentu. Versi sebelumnya memakai daftar
+    Aturan umumnya mengukur SIFAT yang membuat teks itu rusak (deretan kata sangat pendek
+    yang beruntun), bukan mencocokkan kata pemicu tertentu. Versi sebelumnya memakai daftar
     kata pemicu ("ea|al|aan|ana|sel|menn|pean"), sehingga kerusakan dengan bentuk sama
     tetapi huruf berbeda lolos begitu saja: "pean ean be do ke lo ba" tidak tertangkap
     hanya karena kata sesudah pemicunya kebetulan tiga huruf.

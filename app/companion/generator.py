@@ -1,5 +1,5 @@
 """
-Open ADE — Penyusun data draf BAST pelanggan dari kontrak yang SUDAH DIKONFIRMASI PM.
+Open ADE: Penyusun data draf BAST pelanggan dari kontrak yang SUDAH DIKONFIRMASI PM.
 
 Fungsi murni: tidak membaca berkas, tidak memanggil NocoDB. Pemanggil (nanti: n8n atau
 layanan render milik RPA) membaca baris dari database lalu menyerahkannya ke sini.

@@ -1,5 +1,5 @@
 """
-Tests untuk app.parsers.block_grouper — murni fungsi, tanpa Docling/OCR, supaya cepat
+Tests untuk app.parsers.block_grouper: murni fungsi, tanpa Docling/OCR, supaya cepat
 dan tidak bergantung pada model. Skenario diambil dari pola nyata dokumen SPK/PKS
 Indonesia (blok "Nama/Jabatan/Perusahaan" di bawah label PIHAK PERTAMA/KEDUA).
 """

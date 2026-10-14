@@ -1,5 +1,5 @@
 """
-Open ADE — Schema: Surat Penawaran Harga (SPH) / Quotation
+Open ADE: Schema: Surat Penawaran Harga (SPH) / Quotation
 
 Schema khusus untuk dokumen penawaran harga vendor,
 termasuk license, hardware, dan jasa IT.
@@ -94,7 +94,7 @@ class SPHItemDetail(BaseModel):
 
 class SPHExtractionSchema(BaseModel):
     """
-    Schema untuk Surat Penawaran Harga (SPH) Vendor — mendukung
+    Schema untuk Surat Penawaran Harga (SPH) Vendor, mendukung
     penawaran license, hardware, jasa IT, BoQ bertingkat, dan pengadaan umum.
     """
 

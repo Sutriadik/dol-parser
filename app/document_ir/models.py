@@ -1,5 +1,5 @@
 """
-Open ADE — Document Intermediate Representation (Plan §9).
+Open ADE: Document Intermediate Representation (Plan §9).
 
 Satu format internal untuk semua perception engine. Layer extraction, evidence,
 dan validation hanya membaca DocumentIR, tidak lagi bergantung pada format

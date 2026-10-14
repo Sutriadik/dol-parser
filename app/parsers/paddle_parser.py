@@ -1,5 +1,5 @@
 """
-Open ADE — PaddleOCR Parser (v2: Layout-Aware)
+Open ADE: parser PaddleOCR (v2, sadar layout)
 
 Dua mode:
 1. LAYOUT MODE (default): Menggunakan PP-Structure untuk deteksi region layout
@@ -198,7 +198,7 @@ class PaddleOCRParser:
             return True
         return bool(re.match(r"^(https?://)?www\.[a-zA-Z0-9\.\-_]+\.[a-zA-Z]{2,4}/?$", t))
 
-    # LAYOUT MODE — PP-Structure
+    # MODE LAYOUT: PP-Structure
 
     def _parse_with_layout(self, pdf_path: str, max_pages: int = None) -> LandingAIParsedResponse:
         """
@@ -231,7 +231,7 @@ class PaddleOCRParser:
             img_w = pix.width
             img_h = pix.height
 
-            # Extract raw OCR boxes for complete 100% page coverage
+            # Kotak OCR mentah, supaya teks di luar daerah layout tetap terbaca
             enhanced_bgr = preprocess_image_for_ocr(pixmap_to_bgr(pix))
             ocr_results = self.get_engine().ocr(enhanced_bgr, cls=True)
             raw_boxes: list[OCRBox] = []
@@ -256,7 +256,7 @@ class PaddleOCRParser:
                         )
                     )
 
-            # Run PP-Structure layout detection with 100% OCR box recovery
+            # Deteksi layout PP-Structure; kotak OCR yang tidak masuk daerah layout dipulihkan
             regions = layout_parser.parse_page_layout(
                 img_bytes, img_w, img_h, page_num, raw_ocr_boxes=raw_boxes
             )
@@ -349,7 +349,7 @@ class PaddleOCRParser:
             structure=DocumentStructure(children=pages_structure),
         )
 
-    # FALLBACK MODE — PaddleOCR + Spatial Clustering
+    # MODE TANPA LAYOUT: PaddleOCR + pengelompokan spasial
 
     def _parse_with_ocr(self, pdf_path: str, max_pages: int = None) -> LandingAIParsedResponse:
         """

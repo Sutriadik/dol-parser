@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Open ADE — CLI payload companion (skema dol-schema): kontrak dan SPH.
+Open ADE: CLI payload companion (skema dol-schema): kontrak dan SPH.
 
     python scripts/companion.py --tables                        # tabel & statusnya
     python scripts/companion.py --ddl [--write]                 # schema.sql PostgreSQL
@@ -40,7 +40,7 @@ def cmd_ddl(write: bool) -> int:
 
 
 def cmd_tables() -> int:
-    print(f"{len(ALL_TABLES)} tabel — urutan insert: {' -> '.join(insert_order())}\n")
+    print(f"{len(ALL_TABLES)} tabel, urutan insert: {' -> '.join(insert_order())}\n")
     for t in ALL_TABLES:
         penulis = "MANUSIA" if t.written_by == "human" else "mesin"
         print(
@@ -90,7 +90,7 @@ def cmd_map(path: Path, pdf: str | None = None) -> int:
     print(f"\n{out}")
     problems = validate_payload(payload)
     print(
-        ("" + str(len(problems)) + " masalah — jalankan --check untuk detail")
+        ("" + str(len(problems)) + " masalah. Jalankan --check untuk detail")
         if problems
         else "payload lolos validasi"
     )
@@ -102,7 +102,7 @@ def cmd_check(path: Path) -> int:
     problems = validate_payload(payload)
     if not problems:
         total = sum(len(v) for v in payload.values())
-        print(f"{total} baris / {len(payload)} tabel — semua sesuai skema")
+        print(f"{total} baris / {len(payload)} tabel, semua sesuai skema")
         return 0
     print(f"{len(problems)} masalah:")
     for p in problems:
@@ -124,12 +124,12 @@ def cmd_push(path: Path, dry_run: bool, allow_reviewed: bool) -> int:
         print(f"Galat: {e}")
         return 1
     if dry_run:
-        print(f"RENCANA (tidak ada yang dikirim) — {config.NOCODB_URL}\n")
+        print(f"RENCANA (tidak ada yang dikirim): {config.NOCODB_URL}\n")
         for t in hasil["urutan"]:
             print(f"  {t:21} {hasil['baris'][t]:3d} baris   {hasil['strategi'][t]}")
         for t, alasan in hasil["dilewati"].items():
-            print(f"  {t:21}   —       dilewati: {alasan}")
-        print("\n  field_review           —       tidak disentuh (milik PM)")
+            print(f"  {t:21}   -       dilewati: {alasan}")
+        print("\n  field_review           -       tidak disentuh (milik PM)")
         return 0
     for t, s in hasil["tables"].items():
         print(f"  {t:21} {s}")

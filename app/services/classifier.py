@@ -1,5 +1,5 @@
 """
-Open ADE — Document classifier (Plan §10.1).
+Open ADE: Document classifier (Plan §10.1).
 
 Rule berbasis skor dijalankan lebih dulu; LLM hanya dipanggil bila rule ambigu.
 Versi lama memakai urutan if pertama-cocok dengan substring: SPH yang menyebut "SPK"

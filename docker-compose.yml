@@ -1,4 +1,4 @@
-# dol-parser — menjalankan API sebagai service.
+# dol-parser: menjalankan API sebagai service.
 #
 #   docker compose up -d api
 #   docker compose run --rm api python3 scripts/cek_ocr.py   # mesin OCR apa saja yang hidup

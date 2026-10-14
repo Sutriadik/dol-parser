@@ -1,5 +1,5 @@
 """
-Open ADE — Satu pintu dari hasil ekstraksi ke payload companion (skema dol_schema).
+Open ADE: Satu pintu dari hasil ekstraksi ke payload companion (skema dol_schema).
 
 Dipakai oleh CLI (`scripts/companion.py`) dan API (`app/main.py`), supaya kedua jalur
 menghasilkan tabel yang sama.

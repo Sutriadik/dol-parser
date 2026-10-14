@@ -1,5 +1,5 @@
 """
-Open ADE — Aturan tunggal "tipe blok -> Markdown", dipakai SEMUA parser.
+Open ADE: Aturan tunggal "tipe blok -> Markdown", dipakai SEMUA parser.
 
 Sebelumnya aturan ini hanya ada di docling_parser.py, sedangkan jalur PaddleOCR
 (layout_parser.regions_to_markdown) punya perender sendiri yang lebih tua. Akibatnya

@@ -1,5 +1,5 @@
 """
-Open ADE — Rekonsiliasi deterministik hasil LLM dengan teks dokumen.
+Open ADE: Rekonsiliasi deterministik hasil LLM dengan teks dokumen.
 
 Fungsi murni yang mencocokkan keluaran LLM dengan sumber yang lebih bisa dipercaya: tabel
 yang terbaca deterministik, nominal yang ditulis angka sekaligus terbilang, dan aritmetika

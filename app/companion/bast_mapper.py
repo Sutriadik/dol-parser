@@ -1,5 +1,5 @@
 """
-Open ADE — Pemeta hasil ekstraksi BAST -> baris tabel companion (USULAN).
+Open ADE: Pemeta hasil ekstraksi BAST -> baris tabel companion (USULAN).
 
 Tabel BAST di dol_schema berstatus **ditunda**: belum disepakati dengan RPA & Network
 Engineer, jadi hasil pemeta ini TIDAK dikirim ke NocoDB (`payload.py` menolaknya). Modul ini

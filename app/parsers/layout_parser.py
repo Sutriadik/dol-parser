@@ -1,5 +1,5 @@
 """
-Open ADE — Layout-Aware Parser using PP-Structure (v2: Robust Multi-type Layout)
+Open ADE: parser sadar layout dengan PP-Structure (v2, banyak tipe blok)
 
 Menggunakan PaddlePaddle PP-Structure untuk mendeteksi region layout pada halaman dokumen:
 - text / paragraph: Paragraf teks biasa
@@ -228,7 +228,7 @@ class LayoutParser:
             img_w: Lebar gambar (pixels)
             img_h: Tinggi gambar (pixels)
             page_num: Nomor halaman (1-indexed)
-            raw_ocr_boxes: List of OCRBox dari PaddleOCR untuk 100% coverage
+            raw_ocr_boxes: List of OCRBox dari PaddleOCR, untuk teks di luar daerah layout
 
         Returns:
             List[LayoutRegion] yang sudah di-sort berdasarkan reading order

@@ -1,5 +1,5 @@
 """
-Open ADE — Deteksi salinan ganda di dalam satu berkas.
+Open ADE: Deteksi salinan ganda di dalam satu berkas.
 
 Kontrak "half signed" sering dipindai dua kali ke satu PDF (salinan untuk tiap pihak).
 Satu kontrak nyata berisi 16 halaman = kontrak 8 halaman x 2. Tanpa deteksi ini

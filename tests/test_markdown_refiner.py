@@ -1,5 +1,5 @@
 """
-Test untuk app.parsers.markdown_refiner — deteksi kerusakan OCR berat.
+Test untuk app.parsers.markdown_refiner: deteksi kerusakan OCR berat.
 
 Hanya menguji fungsi deterministik (_detect_severe_ocr_corruption).
 Fungsi yang memanggil Ollama (refine_markdown) diuji terpisah

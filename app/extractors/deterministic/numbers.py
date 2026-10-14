@@ -1,5 +1,5 @@
 """
-Open ADE — Deterministic number handling (single source of truth).
+Open ADE: Deterministic number handling (single source of truth).
 
 Sebelumnya logika parsing angka tersebar di 4 tempat dengan perilaku berbeda
 (context_analyzer, table_extractor, grounding_linker, text_cleaner). Semua
@@ -105,7 +105,7 @@ def amounts_equal(a: float | None, b: float | None, tolerance: float = 1.0) -> b
     return abs(a - b) <= tolerance
 
 
-# Terbilang (angka dalam kata) — dipakai validator untuk cek konsistensi total
+# Terbilang (angka dalam kata): dipakai validator untuk cek konsistensi total
 
 _UNIT_WORDS = {
     "nol": 0,

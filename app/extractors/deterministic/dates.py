@@ -1,5 +1,5 @@
 """
-Open ADE — Deterministic date parsing untuk teks Indonesia.
+Open ADE: Deterministic date parsing untuk teks Indonesia.
 """
 
 import re

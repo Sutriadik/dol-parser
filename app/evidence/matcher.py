@@ -1,5 +1,5 @@
 """
-Open ADE — Evidence matcher: skor kecocokan antara nilai hasil ekstraksi dan teks blok dokumen.
+Open ADE: Evidence matcher: skor kecocokan antara nilai hasil ekstraksi dan teks blok dokumen.
 
 Perbaikan terhadap grounding_linker lama:
 - Teks yang kebetulan mengandung satu angka (mis. alamat "Jl. ... No. 1") dulu diperlakukan
@@ -103,8 +103,8 @@ def identifier_skeleton(text: str, fold_ocr: bool = False) -> str:
 
     Dua bentuk di atas adalah nomor yang SAMA; yang kedua hanya hasil OCR menyisipkan
     spasi. Tanpa pembandingan berbasis skeleton, `canon()` memecah keduanya jadi token
-    berbeda ("tel 054321" vs "tel054321") dan nomor kontrak — field paling kritis di
-    dokumen pengadaan — gagal ditemukan di dokumennya sendiri.
+    berbeda ("tel 054321" vs "tel054321") dan nomor kontrak (field paling kritis di
+    dokumen pengadaan) gagal ditemukan di dokumennya sendiri.
     """
     skeleton = _SEPARATOR.sub("", (text or "").strip())
     skeleton = re.sub(r"[^\w]", "", skeleton)

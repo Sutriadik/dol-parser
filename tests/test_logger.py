@@ -1,5 +1,5 @@
 """
-Test untuk app.logger — setup dan konfigurasi logging.
+Test untuk app.logger: setup dan konfigurasi logging.
 """
 
 import logging

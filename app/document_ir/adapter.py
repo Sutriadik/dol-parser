@@ -1,5 +1,5 @@
 """
-Open ADE — Adapter: parser output -> DocumentIR.
+Open ADE: Adapter: parser output -> DocumentIR.
 
 Docling, PaddleOCR (spatial), dan PP-Structure saat ini sama-sama menghasilkan
 LandingAIParsedResponse, sehingga satu adapter ini sudah mencakup ketiganya.

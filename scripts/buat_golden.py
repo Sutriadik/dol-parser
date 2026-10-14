@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Open ADE — bikin rangka berkas golden dari hasil ekstraksi.
+Open ADE: bikin rangka berkas golden dari hasil ekstraksi.
 
     python scripts/buat_golden.py "SPH Vendor X.pdf"
     python scripts/buat_golden.py "SPH Vendor X.pdf" --timpa
@@ -143,7 +143,7 @@ def main() -> int:
         "document": Path(args.dokumen).name,
         "doc_type": doc_type,
         "profile": (hasil.get("document_profile") or {}).get("profile_name", ""),
-        "source": f"RANGKA OTOMATIS dari {sumber.name} — NILAINYA BELUM DIKOREKSI",
+        "source": f"RANGKA OTOMATIS dari {sumber.name}. NILAINYA BELUM DIKOREKSI",
         "notes": (
             "PERIKSA SETIAP NILAI TERHADAP PDF ASLINYA sebelum dipakai. Field yang tidak "
             "ada di dokumen ditulis null, bukan string kosong. Hapus baris field yang "
@@ -164,7 +164,7 @@ def main() -> int:
     )
     print(f"  baris item BoQ  : {len(daftar_item)}")
     print()
-    print("  LANGKAH BERIKUTNYA — jangan dilewati:")
+    print("  LANGKAH BERIKUTNYA (jangan dilewati):")
     print(f"  1. Buka {tujuan} bersebelahan dengan PDF aslinya.")
     print("  2. Perbaiki setiap nilai yang salah; tulis null untuk yang tidak ada di dokumen.")
     print('  3. Hapus baris "belum_dikoreksi" setelah selesai.')

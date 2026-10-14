@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Open ADE — Periksa mesin OCR mana yang benar-benar bisa dipakai di lingkungan ini.
+Open ADE: Periksa mesin OCR mana yang benar-benar bisa dipakai di lingkungan ini.
 
 Dibuat karena kegagalan OCR lintas platform hampir selalu diam: di macOS terpilih Apple
 Vision, di Linux paket itu tidak ada, exception-nya tertelan, dan Docling diam-diam
@@ -67,9 +67,9 @@ def cek_paddle() -> tuple[bool, str]:
         jumlah = paddle.device.cuda.device_count() if pakai_gpu else 0
         if pakai_gpu and jumlah:
             nama = paddle.device.cuda.get_device_name(0)
-            return True, f"v{_versi('paddlepaddle-gpu')} CUDA aktif — {jumlah}x {nama}"
+            return True, f"v{_versi('paddlepaddle-gpu')} CUDA aktif, {jumlah}x {nama}"
         if pakai_gpu:
-            return True, "wheel GPU terpasang TAPI tidak ada GPU terdeteksi — jatuh ke CPU"
+            return True, "wheel GPU terpasang TAPI tidak ada GPU terdeteksi, jadi memakai CPU"
         return True, f"v{_versi('paddlepaddle')} CPU saja (wheel non-GPU)"
     except Exception as e:
         return False, f"gagal diperiksa: {e}"
@@ -101,7 +101,7 @@ def main() -> int:
     siap = [n.split()[0] for n, (ok, _) in hasil.items() if ok]
     print(f"\nBisa dipakai: {', '.join(siap) or '(tidak ada)'}")
     if not siap:
-        print("Tidak ada mesin OCR yang hidup — dokumen hasil scan tidak akan terbaca sama sekali.")
+        print("Tidak ada mesin OCR yang hidup. Dokumen hasil scan tidak akan terbaca sama sekali.")
         return 1
     print("\nLangkah berikutnya:")
     print("  python run.py dokumen.pdf   # satu dokumen, ujung ke ujung")

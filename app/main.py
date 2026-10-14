@@ -559,7 +559,7 @@ job_queue = JobQueue(runner=_run_job, notifier=_notify_callback)
     status_code=202,
     dependencies=[Depends(require_api_key)],
     tags=["Integrasi n8n"],
-    summary="Kirim dokumen untuk diproses (asinkron) — endpoint utama untuk n8n",
+    summary="Kirim dokumen untuk diproses (asinkron), endpoint utama untuk n8n",
     description=(
         "Membalas SEKETIKA dengan job_id dan document_id, lalu memproses di latar. "
         "Satu dokumen butuh 160-310 detik, jadi jalur sinkron /api/v1/process-all akan "

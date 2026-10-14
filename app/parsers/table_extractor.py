@@ -1,7 +1,7 @@
 """
-Open ADE — Table Extractor Module
+Open ADE: Table Extractor Module
 Mengekstrak seluruh tabel Markdown menjadi representasi JSON terstruktur
-dengan menjaga 100% redaksi/konten sel utuh tanpa pemotongan.
+tanpa memotong redaksi isi sel.
 """
 
 import re
