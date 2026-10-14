@@ -658,3 +658,37 @@ def test_laporan_mutu_kosong_atau_rusak_tidak_menggagalkan_pembacaan():
     assert ringkas_mutu_pembacaan(None) is None
     assert ringkas_mutu_pembacaan(tak_ternilai) is None
     assert ringkas_mutu_pembacaan(_Rusak()) is None
+
+
+# Alasan Status per field (companion-2026.10.6)
+#
+# Antrean PM menampilkan `perlu_dicek`/`bertentangan`, tetapi alasannya dulu hanya ada di
+# Catatan Validasi dokumen. PM harus membuka dokumen lain untuk tahu kenapa satu field ditandai.
+
+
+def test_alasan_status_berisi_pesan_validasi_untuk_field_itu():
+    raw = _sample_contract_extraction()
+    raw["validation"] = {
+        "status": "warn",
+        "issues": [
+            {
+                "rule": "ocr_kedua_berbeda",
+                "severity": "warning",
+                "fields": ["Nomor Kontrak Kerja"],
+                "message": 'Bacaan kedua (Tesseract) di halaman 1 berbeda: "No. 12.AB/2031".',
+            },
+            {
+                "rule": "teks_tersembunyi",
+                "severity": "warning",
+                "fields": [],
+                "message": "PDF memuat teks yang tidak terlihat di halaman 1.",
+            },
+        ],
+    }
+    payload = map_contract(raw)
+    fields = {f["field_path"]: f for f in payload["extracted_field"]}
+
+    assert "Tesseract" in fields["Nomor Kontrak Kerja"]["status_reason"]
+    # Peringatan tingkat dokumen tidak disebar ke setiap field.
+    assert fields["Total Harga Pekerjaan"]["status_reason"] is None
+    assert validate_payload(payload) == []

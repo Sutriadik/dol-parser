@@ -22,7 +22,7 @@ class AppConfig(BaseModel):
     TEMP_UPLOADS: Path = STORAGE_DIR / "temp_uploads"
     OUTPUT_DIR: Path = STORAGE_DIR / "outputs"
     PARSING_OUTPUT_DIR: Path = OUTPUT_DIR / "parsing"
-    # .extract.json — hasil ekstraksi lengkap: nilai field + evidence + bounding box.
+    # .extract.json: hasil ekstraksi lengkap: nilai field + evidence + bounding box.
     EXTRACTION_OUTPUT_DIR: Path = OUTPUT_DIR / "extraction"
 
     # Ollama settings
@@ -138,7 +138,7 @@ class AppConfig(BaseModel):
     # BAST. Label "Pihak Pertama/Kedua" tidak bisa dipakai: posisinya terbalik antar-format.
     OWN_COMPANY_PATTERNS: tuple = (r"bhakti\s*unggul\s*teknovasi", r"\bBUT\b")
 
-    # Versioning (Plan §27) — naikkan saat parser/schema berubah.
+    # Versioning (Plan §27): naikkan saat parser/schema berubah.
     # SCHEMA_VERSION = versi skema EKSTRAKSI (Pydantic di app/schemas/), bukan skema database.
     PARSER_VERSION: str = "parse-2026.09.1"
     SCHEMA_VERSION: str = "schema-2026.09.1"
@@ -146,7 +146,7 @@ class AppConfig(BaseModel):
     # Versi skema DATABASE (repo dol-schema) yang dipahami kode ini. dol-schema dipasang dari
     # folder sejajar, jadi yang terpasang adalah apa pun yang sedang ada di folder itu --
     # app/companion menolak jalan bila versinya berbeda. Naikkan bersama perubahan pemeta.
-    DOL_SCHEMA_VERSION: str = "companion-2026.10.5"
+    DOL_SCHEMA_VERSION: str = "companion-2026.10.6"
 
 
 config = AppConfig()

@@ -1,5 +1,5 @@
 """
-Open ADE — Alat bersama untuk pemeta companion (kontrak, SPH, BAST).
+Open ADE: Alat bersama untuk pemeta companion (kontrak, SPH, BAST).
 
 Sebelumnya tiap pemeta punya salinan sendiri, dan salinan itu sudah berbeda diam-diam:
 - identitas dokumen: pemeta memakai sha1 berkas, sementara `document_id` yang dibalas ke n8n
@@ -240,8 +240,21 @@ def document_row(result: dict[str, Any], doc_key: str, doc_type: str) -> dict[st
     }
 
 
+def alasan_per_field(validation: dict[str, Any] | None) -> dict[str, str]:
+    """Pesan validasi yang menyebut field tertentu -> `extracted_field.status_reason`.
+    Peringatan tingkat dokumen (fields kosong) tetap di Catatan Validasi saja."""
+    alasan: dict[str, list[str]] = {}
+    for i in (validation or {}).get("issues") or []:
+        if not isinstance(i, dict) or not i.get("message"):
+            continue
+        for f in i.get("fields") or []:
+            alasan.setdefault(str(f), []).append(str(i["message"]))
+    return {f: "\n".join(dict.fromkeys(pesan)) for f, pesan in alasan.items()}
+
+
 def extracted_field_rows(result: dict[str, Any], doc_key: str) -> list[dict[str, Any]]:
     """Satu baris per field hasil ekstraksi, nama field persis seperti di skema ekstraksi."""
+    alasan = alasan_per_field(result.get("validation"))
     rows = []
     for ev in result.get("evidence") or []:
         if not isinstance(ev, dict) or not ev.get("field") or not disimpan(str(ev["field"])):
@@ -259,6 +272,7 @@ def extracted_field_rows(result: dict[str, Any], doc_key: str) -> list[dict[str,
                 # tidak menentukan Status Bukti.
                 "confidence": ev.get("confidence"),
                 "system_status": STATUS_KE_SKEMA.get(status, "perlu_dicek"),
+                "status_reason": alasan.get(str(ev["field"])),
             }
         )
     return rows
