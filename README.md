@@ -36,7 +36,7 @@ awal (menit mengetik ulang per SPH, jumlah BAST yang dikembalikan) belum dikumpu
 | OCR | RapidOCR (default) | alternatif: Apple Vision (`mac`), Tesseract, PaddleOCR |
 | LLM | Qwen 2.5 7B (`qwen2.5:7b`) lewat Ollama | jalan lokal, dokumen tidak keluar dari mesin |
 | Skema ekstraksi | Pydantic v2 | per jenis dokumen, di `app/schemas/` |
-| Skema database | repo `dol-schema`, versi `companion-2026.10.5` | dipasang editable dari folder sebelah |
+| Skema database | repo `dol-schema`, versi `companion-2026.10.6` | dipasang editable dari folder sebelah |
 | Penyimpanan | NocoDB (API v2) | tempat PM mengonfirmasi per field |
 | Orkestrasi | n8n | dipegang RPA Engineer, di luar repo ini |
 
@@ -196,6 +196,31 @@ Di samping status, dua angka pendamping ikut masuk NocoDB (sejak `companion-2026
   laporan *confidence* Docling. Ikut menilai layout, jadi ini petunjuk, bukan ukuran salah
   baca: PDF digital yang teksnya utuh pernah bernilai `cukup`.
 
+Sejak `companion-2026.10.6` setiap field juga membawa **Alasan Status**: pesan aturan yang
+membuat field itu ditandai, misalnya subtotal + PPN yang tidak sama dengan total. Dulu
+alasannya hanya ada di Catatan Validasi dokumen, jadi PM harus membuka tabel lain untuk tahu
+kenapa satu baris di antreannya berstatus `perlu_dicek`.
+
+### Pemeriksaan yang tidak bergantung pada LLM
+
+Tiga pemeriksaan ini menangkap kesalahan yang tidak terlihat dari skor bukti, karena bukti
+dicari di teks yang sama dengan yang dibaca LLM.
+
+- **Teks tersembunyi.** Profiler membandingkan render halaman sebelum dan sesudah teksnya
+  dihapus. Teks yang tidak mengubah satu piksel pun tidak terlihat oleh PM (ditimpa kotak,
+  warnanya sama dengan latar, atau di luar halaman). Teks itu dibuang dari salinan PDF yang
+  dibaca parser, lalu PM mendapat peringatan di Catatan Validasi. Kasus nyata: SPH vendor
+  yang baris PPN dan totalnya ditimpa kotak putih; sebelumnya Grand Total terisi angka yang
+  tidak tampak di halaman. Dari 107 PDF contoh, 4 berkas memuat teks seperti ini.
+- **Bacaan kedua untuk identifier di halaman scan.** Nomor dokumen, NPWP, dan rekening yang
+  berstatus `bukti_kuat`/`bukti_cukup` dibaca ulang oleh Tesseract dari potongan gambarnya.
+  Bila hasilnya berbeda, status turun ke `perlu_dicek` dan bacaan Tesseract ditulis di Alasan
+  Status. Nilainya tidak pernah diganti. Nominal tidak ikut diperiksa: Tesseract membaca
+  tabel bergaris dengan buruk, dan nominal sudah dijaga aturan aritmetika serta terbilang.
+- **Wakil kedua pihak.** Bila nama perwakilan Pihak Pertama dan Pihak Kedua mirip dan
+  jabatannya sama, keempat field itu ditandai. Pola ini muncul saat blok tanda tangan dua
+  kolom diratakan OCR dan penandatangannya tertukar.
+
 ---
 
 ## Peta kode
@@ -238,7 +263,10 @@ Default sengaja `rapidocr`, bukan `mac`: Apple Vision hanya ada di macOS, jadi a
 yang diukur dengannya tidak bisa ditepati server Linux.
 
 Mesin yang jalan selalu mesin yang diminta. Bila mesin itu gagal, pipeline berhenti dengan
-pesan galat; tidak ada pengalihan otomatis ke mesin lain. `paddle` memakai jalur parser
+pesan galat; tidak ada pengalihan otomatis ke mesin lain. Tesseract tetap dipanggil untuk
+bacaan kedua identifier di halaman scan (lihat di atas), apa pun mesin utamanya. Itu
+verifikasi, bukan cadangan: nilai yang diekstrak tetap dari mesin yang diminta. Tanpa biner
+`tesseract`, langkah itu dilewati dan `run_info.ocr_kedua` menyebutnya. `paddle` memakai jalur parser
 tersendiri (PP-Structure) dan di Mac jauh lebih lambat, jadi hanya jalan bila diminta:
 
 ```bash
@@ -253,6 +281,22 @@ OCR_ENGINE=paddle .venv311/bin/python run.py "dokumen.pdf"
 # koreksi nilainya dengan tangan terhadap PDF asli, hapus "belum_dikoreksi", lalu:
 make eval
 ```
+
+Golden mencatat yang **terlihat** di halaman PDF, termasuk salah ketik penulis dokumen. Bila
+golden dibuat dari keluaran sistem lain (mis. Landing AI), tambahkan `"turunan_dari":
+"landingai"` supaya perbandingan antar-sistem tidak memihak.
+
+### Membandingkan dengan sistem lain
+
+```bash
+.venv311/bin/python -m eval.run_eval --banding-sistem "Hasil Extract Landing AI"
+```
+
+Perintah ini menilai dol-parser dan keluaran sistem lain dengan golden yang sama, lalu
+memisahkan field intrinsik (nomor, nama, angka) dari field konvensi (seberapa panjang klausul
+dikutip, catatan yang mana). Field konvensi mengikuti prompt dol-parser, jadi sistem lain bisa
+kalah di sana tanpa salah membaca. Golden rangka dan golden turunan tidak ikut dihitung. Nama
+berkas yang berbeda dari nama golden dipetakan lewat `_peta.json` di folder itu.
 
 ---
 

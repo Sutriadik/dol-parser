@@ -105,6 +105,14 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 - **Perbaikan:** baca 10 masalah pertama yang dicetak di bawah pesan itu. Untuk berkas
   companion: `scripts/companion.py --check <berkas>.companion.json`.
 
+### Payload ditolak NocoDB setelah naik ke `companion-2026.10.6`
+
+- **Penyebab:** versi skema ini menambah kolom `Alasan Status` di tabel Hasil Ekstraksi. Base
+  yang dibuat dengan versi lama belum punya kolom itu.
+- **Perbaikan:** tambahkan kolom teks panjang berjudul `Alasan Status` di tabel Hasil
+  Ekstraksi lewat UI NocoDB, atau buat base baru dengan `make buat-base`. Lalu `make
+  cek-skema` untuk memastikan semua kolom sudah sama dengan dol-schema.
+
 ### `'field_review' ditulis manusia; pipeline tidak boleh mengirim ke sini.`
 
 - Disengaja. `field_review` hanya diisi PM. Jangan mengirim tabel ini dari pipeline.
@@ -223,6 +231,35 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
 - **Yang perlu dilakukan PM:** buka halaman yang disebut dan pastikan isinya memang sama.
   Bila salinan kedua ternyata **revisi** (harga atau tanggal berbeda), proses ulang dengan
   PDF yang hanya berisi versi terbaru.
+
+### `PDF memuat teks yang tidak terlihat di halaman N … Teks itu tidak ikut dibaca AI.`
+
+- **Artinya:** lapisan teks PDF berisi tulisan yang tidak tampak saat halaman dibuka: ditimpa
+  kotak, warnanya sama dengan latar, atau di luar batas halaman. Sistem membuangnya sebelum
+  parsing supaya nilai yang diekstrak sama dengan yang dilihat PM. Contoh nyata: SPH vendor
+  yang baris PPN dan totalnya ditutup kotak putih, sehingga yang tampak hanya Total Harga.
+- **Yang perlu dilakukan PM:** buka halaman yang disebut dan bandingkan dengan kutipan di
+  pesan. Bila menyangkut harga atau pajak, tanyakan ke vendor versi mana yang berlaku.
+- Varian `… tetap ikut dibaca AI` berarti teks tersembunyi itu menumpuk dengan teks yang
+  terlihat dan tidak bisa dipisahkan. Cocokkan nilai di halaman itu dengan tampilan PDF.
+
+### Field nomor/NPWP/rekening berstatus `perlu_dicek` dengan alasan `Bacaan kedua (Tesseract) … berbeda`
+
+- **Artinya:** halaman itu hasil scan. Tesseract membaca ulang potongan gambarnya dan hasilnya
+  tidak sama persis dengan nilai yang dibaca RapidOCR, biasanya di titik, strip, atau huruf
+  O/0. Nilainya tidak diganti; hanya statusnya yang turun supaya PM melihatnya.
+- **Yang perlu dilakukan PM:** cocokkan karakter demi karakter dengan PDF. Tesseract juga
+  bisa salah, jadi bacaannya petunjuk, bukan jawaban.
+- **Tidak muncul sama sekali?** Cek `run_info.ocr_kedua` di `*.extract.json`. Nilai
+  `"alasan": "tesseract tidak terpasang"` berarti biner `tesseract` belum ada (`brew install
+  tesseract tesseract-lang` di Mac; image Docker sudah memuatnya).
+
+### `Wakil Pihak Pertama dan Pihak Kedua tampak orang yang sama`
+
+- **Penyebab:** blok tanda tangan dua kolom diratakan OCR, lalu LLM memasang penandatangan
+  satu pihak ke pihak lain. Aturan ini menandai pasangan nama yang mirip dengan jabatan yang
+  sama; dua direktur yang namanya berbeda tidak ditandai.
+- **Yang perlu dilakukan PM:** lihat blok tanda tangan dan tentukan siapa mewakili siapa.
 
 ### `Invalid JSON: EOF while parsing a string` / nilai berisi `0123456789012345…`
 
