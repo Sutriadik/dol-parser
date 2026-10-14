@@ -1,8 +1,8 @@
 """
-Open ADE — LaTeX-Grade Table Converter Module
+Open ADE: konversi tabel HTML ke Markdown
 
 Mengonversi tabel HTML (dari Docling / PPStructure SLANet) atau OCR bounding boxes menjadi
-Markdown table 2D yang bersih, terstruktur, dan beralignment presisi (setara tabular LaTeX).
+tabel Markdown 2D dengan kolom yang rata.
 """
 
 import re
@@ -139,16 +139,13 @@ def _clean_cell_content(cell: str) -> str:
     # Perbaiki kata satuan/waktu menempel ke angka: "Paket12" -> "Paket 12"
     c = re.sub(r"\b(Paket|Bulan|Tahun|Hari|Item|pkt|Pkt)(\d+)\b", r"\1 \2", c)
 
-    # Perbaiki typo umum seperti 'Acess' -> 'Access', 'Standart' -> 'Standard'
-    c = re.sub(r"\bAcess\b", "Access", c, flags=re.IGNORECASE)
-    c = re.sub(r"\bStandart\b", "Standard", c, flags=re.IGNORECASE)
     return c
 
 
 def rows_to_markdown_table(rows: list[list[str]], has_header: bool = True) -> str:
     """
     Konversi list of rows menjadi Markdown table 2D berformat LaTeX tabular.
-    - Monospace column padding presisi
+    - Kolom diberi padding supaya rata di teks monospace
     - Alignment: Rata kanan untuk angka/nominal, rata kiri untuk deskripsi, rata tengah untuk
       No/Satuan.
     """
@@ -222,7 +219,7 @@ def rows_to_markdown_table(rows: list[list[str]], has_header: bool = True) -> st
 
 
 def html_table_to_markdown(html_str: str) -> str:
-    """Konversi HTML <table> string langsung ke Markdown table LaTeX-grade."""
+    """Konversi string HTML <table> langsung ke tabel Markdown."""
     if not html_str or "<table" not in html_str.lower():
         return ""
     rows = html_table_to_rows(html_str)
@@ -249,7 +246,7 @@ def parse_markdown_table_to_rows(table_md: str) -> list[list[str]]:
 def reformat_markdown_tables_in_text(text: str) -> str:
     """
     Mendeteksi semua tabel Markdown dalam teks dokumen dan
-    memformat ulang menjadi format LaTeX-grade yang rapi dan ter-align.
+    memformat ulang dengan kolom yang rata.
     """
     if not text or "|" not in text:
         return text

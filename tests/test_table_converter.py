@@ -139,3 +139,13 @@ class TestHTMLTableToMarkdown:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_ejaan_asli_di_sel_tabel_tidak_dibetulkan():
+    from app.parsers.table_converter import _clean_cell_content
+
+    assert _clean_cell_content("Acess Point") == "Acess Point"
+    assert (
+        _clean_cell_content("Oracle Database Standart Edition 2")
+        == "Oracle Database Standart Edition 2"
+    )

@@ -1,22 +1,22 @@
 """
-Open ADE — OCR Post-Processing & Text Cleaning Module
+Open ADE: pembersihan teks hasil OCR
 
 Membersihkan output OCR (PaddleOCR/Docling) sebelum dikirim ke LLM dan sebelum disimpan ke
 *.parse.md.
-Menghasilkan Markdown yang 100% rapi, bebas typo karakter, tanpa kata menempel, dan tabel
-beralignment presisi.
+Membereskan salah baca karakter OCR, kata yang menempel, dan perataan kolom tabel. Salah
+ketik penulis dokumen dibiarkan apa adanya.
 
 Pipeline cleaning:
-  1. fix_common_ocr_typos()         — Perbaiki typo karakter OCR (TELK0M, 0racle, Isiam, dll.)
-  2. fix_missing_spaces()           — Perbaiki kata/angka/tanda baca yang menempel
-  3. fix_entity_and_legal_spacing() — Perbaiki kata kapital, nomor pasal, lampiran, badan usaha
-  4. normalize_entity_casing()      — Normalisasi casing entitas resmi
-  5. clean_signature_noise()        — Hapus artefak noise stempel/tanda tangan (MmEto, fer, dll.)
-  6. clean_footer_noise()           — Bersihkan footer/running noise yang menyusup ke teks
-  7. fix_number_formatting()        — Normalisasi format angka dan rupiah
-  8. normalize_whitespace()         — Collapse spasi berlebih, rapikan newline
-  9. reformat_tables()              — Format ulang tabel ke standar LaTeX tabular
-  10. clean_ocr_text()              — Master function yang mengorkestrasi seluruh pipeline
+  1. fix_common_ocr_typos()         : Perbaiki typo karakter OCR (TELK0M, 0racle, Isiam, dll.)
+  2. fix_missing_spaces()           : Perbaiki kata/angka/tanda baca yang menempel
+  3. fix_entity_and_legal_spacing() : Perbaiki kata kapital, nomor pasal, lampiran, badan usaha
+  4. normalize_entity_casing()      : Normalisasi casing entitas resmi
+  5. clean_signature_noise()        : Hapus artefak noise stempel/tanda tangan (MmEto, fer, dll.)
+  6. clean_footer_noise()           : Bersihkan footer/running noise yang menyusup ke teks
+  7. fix_number_formatting()        : Normalisasi format angka dan rupiah
+  8. normalize_whitespace()         : Collapse spasi berlebih, rapikan newline
+  9. reformat_tables()              : Ratakan ulang kolom tabel Markdown
+  10. clean_ocr_text()              : Master function yang mengorkestrasi seluruh pipeline
 """
 
 import re
@@ -38,6 +38,7 @@ OCR_TYPO_MAP: dict[str, str] = {
     "TELK0M": "TELKOM",
     "Telk0m": "Telkom",
     "TELkoM": "TELKOM",
+    "TELKOMREGIONALI": "TELKOM REGIONAL I",
     "TELKOMREGIONAL": "TELKOM REGIONAL",
     "REGIONALI": "REGIONAL I",
     "PlHAK": "PIHAK",
@@ -53,26 +54,34 @@ OCR_TYPO_MAP: dict[str, str] = {
     "ATs": "ATS",
     "&OPERATION": "& OPERATION",
     "&operation": "& operation",
-    "Acess Point": "Access Point",
-    "acess point": "access point",
-    "Standart": "Standard",
-    "standart": "standard",
-    "Progam": "Program",
-    "Procesor": "Processor",
-    # Kata-kata umum Indonesia yang sering typo
-    "sebesar Rp": "sebesar Rp.",
+    # Kata menempel karena spasi hilang saat OCR
     "Yangdalam": "Yang dalam",
-    "diatas": "di atas",
-    "dibawah": "di bawah",
     "sebaik-baiknya.Berdasarkan": "sebaik-baiknya. Berdasarkan",
     "danSustainability": "dan Sustainability",
     "perbuatanhukum": "perbuatan hukum",
     "yangberwenang": "yang berwenang",
-    # Unit dan singkatan
-    "pkt": "pkt",
     "LampiranII": "Lampiran II",
     "LampiranI": "Lampiran I",
 }
+# Kamus ini hanya untuk salah BACA OCR (huruf/angka tertukar, spasi hilang). Salah KETIK penulis
+# dokumen ("Standart", "Acess Point", "Progam", "diatas") sengaja tidak dibetulkan: golden dan PM
+# membandingkan dengan PDF, dan entri seperti itu dulu diambil dari dokumen golden sendiri
+# sehingga ikut menaikkan skor eval pada dokumen yang sama.
+#
+# Penggantian berbatas kata. Tanpa batas, "REGIONALI" memecah "REGIONALISASI" menjadi
+# "REGIONAL ISASI", dan "sebesar Rp" -> "sebesar Rp." membuat "Rp." menjadi "Rp..". Batasnya
+# huruf/angka saja, bukan \w: garis bawah teks miring markdown bukan bagian kata.
+_TYPO_PATTERNS = [
+    (
+        re.compile(
+            ("(?<![A-Za-z0-9])" if typo[0].isalnum() else "")
+            + re.escape(typo)
+            + ("(?![A-Za-z0-9])" if typo[-1].isalnum() else "")
+        ),
+        correct,
+    )
+    for typo, correct in OCR_TYPO_MAP.items()
+]
 
 
 # Huruf kecil yang bentuknya sama dengan kapitalnya (c k o s v w x z) dan terselip di tengah
@@ -83,8 +92,8 @@ _KAPITAL_SALAH_BACA = re.compile(r"\b([A-Z]{2,})([cksovwxz])(?=[A-Z]{2,}\b)")
 
 def fix_common_ocr_typos(text: str) -> str:
     """Mengganti typo OCR umum berdasarkan dictionary lookup."""
-    for typo, correct in OCR_TYPO_MAP.items():
-        text = text.replace(typo, correct)
+    for pattern, correct in _TYPO_PATTERNS:
+        text = pattern.sub(correct, text)
     return _KAPITAL_SALAH_BACA.sub(lambda m: m.group(1) + m.group(2).upper(), text)
 
 
@@ -374,7 +383,7 @@ def clean_ocr_text(text: str) -> str:
     # Step 8: Normalize whitespace
     text = normalize_whitespace(text)
 
-    # Step 9: Reformat seluruh tabel Markdown menjadi standar LaTeX-grade
+    # Step 9: ratakan ulang kolom semua tabel Markdown
     text = reformat_markdown_tables_in_text(text)
 
     return text

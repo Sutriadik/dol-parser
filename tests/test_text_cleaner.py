@@ -46,6 +46,32 @@ class TestFixCommonOCRTypos:
         # "a" kecil bentuknya beda dari "A": kemungkinan besar memang ditulis begitu.
         assert fix_common_ocr_typos("model LLaMA dan PPh") == "model LLaMA dan PPh"
 
+    def test_kamus_tidak_memecah_kata_yang_lebih_panjang(self):
+        """Dulu "REGIONALI" diganti di tengah kata: "REGIONALISASI" jadi "REGIONAL ISASI"."""
+        assert fix_common_ocr_typos("REGIONALISASI") == "REGIONALISASI"
+        assert fix_common_ocr_typos("TELKOM REGIONALI") == "TELKOM REGIONAL I"
+        assert fix_common_ocr_typos("TELKOMREGIONALI") == "TELKOM REGIONAL I"
+        assert fix_common_ocr_typos("LampiranII") == "Lampiran II"
+        # Garis bawah markdown (teks miring) bukan bagian kata: "\\w" menganggapnya huruf, jadi
+        # baris tanda tangan "_... TELKOM REGIONALI_" sempat tidak diperbaiki.
+        assert fix_common_ocr_typos("_NAMA SM TELKOM REGIONALI_") == "_NAMA SM TELKOM REGIONAL I_"
+
+    def test_ejaan_asli_dokumen_tidak_dibetulkan(self):
+        """Salah ketik penulis dokumen bukan salah baca OCR. Golden mencatat teks apa adanya
+        ("Standart", "Acess"), dan PM membandingkan dengan PDF, bukan dengan kamus."""
+        for teks in (
+            "Oracle Database Standart Edition 2",
+            "Acess Point",
+            "Ordering Progam",
+            "Procesor 8 core",
+            "tersebut diatas",
+            "dibawah ini",
+        ):
+            assert fix_common_ocr_typos(teks) == teks
+
+    def test_rp_bertitik_tidak_digandakan(self):
+        assert fix_common_ocr_typos("sebesar Rp. 166.500.000") == "sebesar Rp. 166.500.000"
+
     def test_pihak_typos(self):
         assert "PIHAK" in fix_common_ocr_typos("PlHAK")
         assert "PIHAK" in fix_common_ocr_typos("PiHAK")
