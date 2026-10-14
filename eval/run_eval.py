@@ -1,5 +1,5 @@
 """
-Open ADE — Evaluation runner (Plan Phase 0/1: baseline + golden dataset).
+Open ADE: Evaluation runner (Plan Phase 0/1: baseline + golden dataset).
 
 Membandingkan output *.extract.json terhadap golden file field-by-field,
 tanpa menjalankan parser/LLM ulang. Jadi setiap perubahan bisa dibuktikan
@@ -248,6 +248,104 @@ def bandingkan_laporan(lama: dict[str, Any], baru: dict[str, Any]) -> dict[str, 
     }
 
 
+# Field yang jawabannya bergantung pada konvensi: seberapa panjang dikutip, catatan yang mana,
+# selengkap apa jabatannya. Golden mengikuti konvensi yang diajarkan ke prompt dol-parser, jadi
+# sistem lain yang tidak diajari konvensi itu kalah di sini tanpa salah membaca. Saat
+# membandingkan sistem, field ini dilaporkan terpisah dari field intrinsik (nomor, nama, angka).
+FIELD_KONVENSI = (
+    "Jangka Waktu",
+    "Catatan Khusus",
+    "Lokasi",
+    "Persentase Sanksi",
+    "Mekanisme",
+    "Syarat",
+    "Garansi",
+    "Masa Berlaku",
+    "Jabatan",
+    "Keterangan",
+    "Spesifikasi",
+    "Tujuan Surat",
+)
+
+
+def jenis_field(field: str) -> str:
+    return "konvensi" if any(k in field for k in FIELD_KONVENSI) else "intrinsik"
+
+
+def _muat_sistem_lain(lain_dir: Path, stem: str) -> dict[str, Any] | None:
+    """Keluaran ekstraksi sistem lain untuk satu dokumen: `<stem>.json`, atau nama berkas dari
+    `_peta.json` di folder yang sama. Respons API ADE (`{"extraction": ...}`) juga diterima."""
+    peta_path = lain_dir / "_peta.json"
+    peta = json.loads(peta_path.read_text(encoding="utf-8")) if peta_path.exists() else {}
+    path = lain_dir / peta.get(stem, f"{stem}.json")
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data.get("extraction", data) if isinstance(data, dict) else None
+
+
+def banding_sistem(
+    goldens: list[dict[str, Any]], pred_dir: Path, lain_dir: Path, nama_lain: str
+) -> dict[str, Any]:
+    """
+    Nilai dol-parser dan sistem lain dengan golden yang sama, dipisah intrinsik/konvensi.
+
+    Golden yang dibuat dari keluaran salah satu sistem (`"turunan_dari"`) dan golden rangka
+    dikeluarkan: keduanya memihak.
+    """
+    ok = {"exact", "lenient", "correct_null"}
+    total: dict[tuple[str, str], list[int]] = {}
+    dokumen, dilewati = [], []
+    for golden in goldens:
+        stem = Path(golden["document"]).stem
+        if golden.get("belum_dikoreksi") or golden.get("turunan_dari"):
+            asal = "rangka" if golden.get("belum_dikoreksi") else "turunan"
+            asal = f"{asal} {golden.get('turunan_dari') or ''}".strip()
+            dilewati.append(f"{stem} (golden {asal})")
+            continue
+        ours_path = pred_dir / f"{stem}.extract.json"
+        lain = _muat_sistem_lain(lain_dir, stem)
+        if not ours_path.exists() or lain is None:
+            dilewati.append(f"{stem} (keluaran tidak lengkap)")
+            continue
+        # Keluaran dengan nama field lain (mis. skema berbahasa Inggris) tidak bisa dinilai
+        # dengan golden ini; menghitungnya membuat semua field sistem itu tampak salah.
+        dikenal = set(flatten(lain))
+        cakupan = sum(f in dikenal for f in golden["fields"]) / max(len(golden["fields"]), 1)
+        if cakupan < 0.5:
+            dilewati.append(f"{stem} (skema berbeda: {cakupan:.0%} field golden dikenali)")
+            continue
+        hasil = {
+            "dol-parser": evaluate_document(
+                golden, json.loads(ours_path.read_text(encoding="utf-8"))
+            ),
+            nama_lain: evaluate_document(golden, {"data": lain}),
+        }
+        baris = {}
+        for sistem, r in hasil.items():
+            for row in r["rows"]:
+                t = total.setdefault((sistem, jenis_field(row["field"])), [0, 0])
+                t[0] += 1
+                t[1] += row["verdict"] in ok
+                baris.setdefault(row["field"], {})[sistem] = row["verdict"] in ok
+        dokumen.append(
+            {
+                "document": golden["document"],
+                "benar_hanya_dol_parser": [
+                    f for f, v in baris.items() if v["dol-parser"] and not v[nama_lain]
+                ],
+                f"benar_hanya_{nama_lain}": [
+                    f for f, v in baris.items() if v[nama_lain] and not v["dol-parser"]
+                ],
+            }
+        )
+    ringkasan = {
+        f"{sistem}/{jenis}": {"benar": b, "n": n, "akurasi": round(b / n, 3) if n else None}
+        for (sistem, jenis), (n, b) in sorted(total.items())
+    }
+    return {"ringkasan": ringkasan, "dokumen": dokumen, "dilewati": dilewati}
+
+
 def _cetak_banding(beda: dict[str, Any], nama_lama: str) -> None:
     print(f"\nBANDING dengan {nama_lama}")
     for judul, kunci in (
@@ -276,6 +374,14 @@ def main() -> int:
     parser.add_argument(
         "--verbose", action="store_true", help="Tampilkan semua field, bukan hanya yang salah"
     )
+    parser.add_argument(
+        "--banding-sistem",
+        default=None,
+        metavar="FOLDER",
+        help="Folder keluaran ekstraksi sistem lain (mis. Landing AI): nilai kedua sistem dengan "
+        "golden yang sama, dipisah field intrinsik dan konvensi.",
+    )
+    parser.add_argument("--nama-sistem", default="landingai", help="Nama sistem lain di laporan.")
     parser.add_argument(
         "--banding",
         default=None,
@@ -362,6 +468,23 @@ def main() -> int:
             encoding="utf-8",
         )
         print(f"Report disimpan: {out}")
+
+    if args.banding_sistem:
+        goldens = [
+            json.loads(p.read_text(encoding="utf-8")) for p in sorted(GOLDEN_DIR.glob("*.json"))
+        ]
+        goldens = [g for g in goldens if "fields" in g and "document" in g]
+        hasil = banding_sistem(goldens, pred_dir, Path(args.banding_sistem), args.nama_sistem)
+        print(f"\nBANDING dol-parser vs {args.nama_sistem} (golden sama, tanpa golden memihak)")
+        for kunci, v in hasil["ringkasan"].items():
+            print(f"   {kunci:28} {v['benar']}/{v['n']}  ({v['akurasi']})")
+        for d in hasil["dokumen"]:
+            print(f"   {d['document']}")
+            for k, v in d.items():
+                if k != "document" and v:
+                    print(f"      {k}: {v}")
+        for d in hasil["dilewati"]:
+            print(f"   dilewati: {d}")
 
     if args.banding:
         lama = json.loads(Path(args.banding).read_text(encoding="utf-8"))
