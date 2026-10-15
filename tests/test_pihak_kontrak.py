@@ -192,3 +192,58 @@ def test_penerima_surat_tidak_dipakai_bila_perusahaan_pihak_kedua_kosong():
         hasil, SURAT, penerima_surat_pihak_kedua=True
     )
     assert hasil.pihak_kedua.jabatan in (None, "")
+
+
+# Jumlah item yang tidak sama dengan subtotal harus menurunkan status setiap harga item.
+# Kasus nyata (SPK scan di luar golden): tabel berkelompok dipecah jadi 5 baris dan harga item
+# kedua tersalin dari item pertama. Aturan jumlah item sudah memberi peringatan, tetapi hanya
+# atas nama "List Item/Barang", sehingga harga per item tetap berstatus bukti_kuat.
+
+
+def test_jumlah_item_tidak_cocok_menandai_setiap_harga_item():
+    from app.document_ir.models import DocumentBlock, DocumentIR, DocumentPage
+    from app.evidence.locator import build_field_evidence
+    from app.schemas.evidence import FieldStatus
+
+    data = {
+        "Nomor Kontrak Kerja": "12/AB/2031",
+        "Nama Pekerjaan": "Lisensi",
+        "Pihak Pertama": {"Nama Perusahaan": "PT Satu"},
+        "Pihak Kedua": {"Nama Perusahaan": "PT Dua"},
+        "List Item/Barang": [
+            {"volume": 1, "Harga Satuan": 100_000_000, "Jumlah Harga": 100_000_000},
+            {"volume": 1, "Harga Satuan": 100_000_000, "Jumlah Harga": 100_000_000},
+        ],
+        "sub total": 250_000_000,
+    }
+    laporan = validate_contract(data)
+    teks = "Harga 100.000.000 dan 150.000.000. Subtotal 250.000.000. Nomor 12/AB/2031"
+    ir = DocumentIR(
+        document_id="d",
+        file_name="uji.pdf",
+        source_engine="uji",
+        pages=[
+            DocumentPage(
+                page_number=1,
+                blocks=[
+                    DocumentBlock(
+                        document_id="d",
+                        block_id="b1",
+                        page=1,
+                        text=teks,
+                        reading_order=0,
+                        source_engine="uji",
+                    )
+                ],
+            )
+        ],
+    )
+    status = {e.field: e.status for e in build_field_evidence(data, ir, laporan)}
+
+    assert status["List Item/Barang[1].Harga Satuan"] == FieldStatus.REVIEW_REQUIRED
+    assert status["List Item/Barang[1].Jumlah Harga"] == FieldStatus.REVIEW_REQUIRED
+    assert any(
+        "List Item/Barang[1].Jumlah Harga" in i.fields
+        for i in laporan.issues
+        if i.rule == "items_sum_matches_subtotal"
+    )

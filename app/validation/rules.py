@@ -183,10 +183,18 @@ def _check_items(
         and (subtotal or total)
         and not (_close(line_sum, subtotal) or _close(line_sum, total))
     ):
+        # Setiap harga & jumlah item disebut satu per satu: status bukti dicocokkan per nama
+        # field persis, jadi peringatan atas nama "List Item/Barang" saja membiarkan harga item
+        # tetap bukti_kuat. Kasus nyata: harga item kedua tersalin dari item pertama.
+        per_item = [
+            f"{items_key}[{i}].{key}"
+            for i in range(len(items))
+            for key in (price_key, line_total_key)
+        ]
         c.add(
             "items_sum_matches_subtotal",
             Severity.WARNING,
-            [items_key, subtotal_key],
+            [items_key, *per_item, subtotal_key],
             "Jumlah harga seluruh item tidak sama dengan subtotal maupun total",
             expected=subtotal,
             actual=line_sum,
