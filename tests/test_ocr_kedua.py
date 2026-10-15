@@ -163,3 +163,25 @@ def test_tesseract_macet_tidak_menggagalkan_dokumen(pdf_kosong, monkeypatch):
     assert hasil[0].status == FieldStatus.AUTO_VERIFIED
     assert berbeda == []
     assert ringkas["galat"] == 1 and ringkas["diperiksa"] == 0
+
+
+def test_beda_hanya_o_dan_nol_bukan_alarm(pdf_kosong, bacaan):
+    """Kasus nyata (Nota Pesanan scan, dokumen di luar golden): RapidOCR membaca "0H0K0000"
+    dengan benar, Tesseract membacanya "OHOKOO00". Huruf O/angka 0 dan I/1 sering tertukar
+    di antara dua mesin; beda seperti itu bukan bukti salah baca."""
+    bacaan("Nomor : K.TEL.117/HK.820/T2W-OHOKOO00/2031 Tanggal 23")
+    evidence = [_ev("Nomor Kontrak Kerja", "K. TEL.117/HK.820/T2W-0H0K0000/2031")]
+
+    hasil, berbeda, _ = verify_identifiers_second_ocr(evidence, pdf_kosong, [1])
+
+    assert hasil[0].status == FieldStatus.AUTO_VERIFIED
+    assert berbeda == []
+
+
+def test_titik_hilang_tetap_alarm_walau_ada_o_dan_nol(pdf_kosong, bacaan):
+    bacaan("Nomor : K.TEL.117/HK.820/T2W-OHOKOO00/2031")
+    evidence = [_ev("Nomor Kontrak Kerja", "K.TEL117/HK.820/T2W-0H0K0000/2031")]
+
+    hasil, berbeda, _ = verify_identifiers_second_ocr(evidence, pdf_kosong, [1])
+
+    assert hasil[0].status == FieldStatus.REVIEW_REQUIRED

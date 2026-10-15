@@ -284,8 +284,14 @@ def _perlu_bacaan_kedua(ev: FieldEvidence, ocr_pages: set[int]) -> bool:
     )
 
 
+# Huruf dan angka yang bentuknya sama sering dibaca berbeda oleh dua mesin OCR. Kasus nyata di
+# luar golden: RapidOCR benar membaca "0H0K0000", Tesseract membaca "OHOKOO00". Beda seperti itu
+# disamakan; beda tanda baca (titik, strip, garis miring) dan angka lain tetap dihitung.
+_BENTUK_SAMA = str.maketrans({"O": "0", "I": "1"})
+
+
 def _tanpa_spasi(teks: str) -> str:
-    return "".join(str(teks).split()).upper()
+    return "".join(str(teks).split()).upper().translate(_BENTUK_SAMA)
 
 
 def _baris_terdekat(bacaan: str, value: str) -> str:
