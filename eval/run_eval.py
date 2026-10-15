@@ -370,6 +370,11 @@ def _cetak_banding(beda: dict[str, Any], nama_lama: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate extraction outputs against golden files")
     parser.add_argument("--pred-dir", default=str(DEFAULT_PRED_DIR))
+    parser.add_argument(
+        "--golden-dir",
+        default=str(GOLDEN_DIR),
+        help="Folder golden lain, mis. set hold-out eval/golden/holdout (tidak dipakai menyetel).",
+    )
     parser.add_argument("--label", default=None, help="Simpan report ke eval/reports/<label>.json")
     parser.add_argument(
         "--verbose", action="store_true", help="Tampilkan semua field, bukan hanya yang salah"
@@ -393,7 +398,8 @@ def main() -> int:
     pred_dir = Path(args.pred_dir)
     results = []
     belum_dikoreksi = []
-    for golden_path in sorted(GOLDEN_DIR.glob("*.json")):
+    golden_dir = Path(args.golden_dir)
+    for golden_path in sorted(golden_dir.glob("*.json")):
         golden = json.loads(golden_path.read_text(encoding="utf-8"))
         # Rangka dari scripts/buat_golden.py lahir dengan flag ini. Selama belum dicabut,
         # isinya masih tebakan mesin -- mengevaluasinya berarti membandingkan mesin dengan
@@ -471,7 +477,7 @@ def main() -> int:
 
     if args.banding_sistem:
         goldens = [
-            json.loads(p.read_text(encoding="utf-8")) for p in sorted(GOLDEN_DIR.glob("*.json"))
+            json.loads(p.read_text(encoding="utf-8")) for p in sorted(golden_dir.glob("*.json"))
         ]
         goldens = [g for g in goldens if "fields" in g and "document" in g]
         hasil = banding_sistem(goldens, pred_dir, Path(args.banding_sistem), args.nama_sistem)
