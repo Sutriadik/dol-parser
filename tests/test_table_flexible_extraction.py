@@ -542,3 +542,284 @@ def test_item_dari_tabel_berjudul_menyambung_memuat_harga():
         (4_500_000.0, 9_000_000.0),
         (1_250_000.0, 1_250_000.0),
     ]
+
+
+# Sel gabungan (rowspan). Satu item bisa terdiri atas beberapa sub-baris (kode produk) dengan
+# satu sel harga yang digabung. Docling menyalin isi sel gabungan ke setiap sub-baris, jadi
+# harga item itu terhitung sekali per sub-baris. Kasus nyata (SPH dan SPK lisensi firewall,
+# tiga dokumen): jumlah item 2-3x subtotal tertulis. Nomor dan harga di bawah ini rekaan.
+TABEL_SEL_GABUNGAN = """
+| No | Model | Kode Produk | Uraian | Vol | Harga Satuan (Rp) | Jumlah (Rp) |
+|---|---|---|---|---|---|---|
+| 1 | Perpanjangan Alat A | KP-1 | Paket keamanan, 1 tahun | 1 | 100.000.000 | 100.000.000 |
+| 1 | Perpanjangan Alat A | KP-2 | Dukungan teknis, 1 tahun | 1 | 100.000.000 | 100.000.000 |
+| 1 | Perpanjangan Alat A | KP-3 | Penggantian unit, 1 tahun | 1 | 100.000.000 | 100.000.000 |
+| 2 | Perpanjangan Alat B | KP-1 | Paket keamanan, 1 tahun | 1 | 50.000.000 | 50.000.000 |
+| 2 | Perpanjangan Alat B | KP-4 | Modul aplikasi web, 1 tahun | 1 | 50.000.000 | 2 |
+"""
+
+
+def test_harga_sel_gabungan_yang_disalin_docling_dihitung_sekali():
+    md = TABEL_SEL_GABUNGAN + "| Jumlah Harga | Jumlah Harga | | | | | 150.000.000 |\n"
+
+    items = _rekonsiliasi_kontrak(md, [150_000_000, 166_500_000])
+
+    assert [(i.nomor_item, i.jumlah_harga) for i in items] == [
+        ("1", 100_000_000),
+        ("2", 50_000_000),
+    ]
+    assert "KP-3" in str(items[0].extra_attributes)
+    assert "Penggantian unit" in items[0].deskripsi
+
+
+def test_sel_gabungan_dikenali_dari_total_termasuk_ppn_bila_subtotal_tidak_tertulis():
+    md = TABEL_SEL_GABUNGAN + "\nNilai pekerjaan Rp 166.500.000,- sudah termasuk PPN 11%.\n"
+
+    items = _rekonsiliasi_kontrak(md, [None, 166_500_000])
+
+    assert sum(i.jumlah_harga for i in items) == 150_000_000
+
+
+def test_baris_bernomor_sama_dengan_harga_sendiri_tidak_digabung():
+    """Jumlah semua baris sudah sama dengan subtotal tertulis: tidak ada yang digabung."""
+    md = TABEL_SEL_GABUNGAN + "| Jumlah Harga | | | | | | 400.000.002 |\n"
+
+    items = _rekonsiliasi_kontrak(md, [400_000_002, None])
+
+    assert len(items) == 5
+
+
+def test_sel_gabungan_tanpa_rujukan_tertulis_tidak_digabung():
+    items = _rekonsiliasi_kontrak(TABEL_SEL_GABUNGAN, [150_000_000, None])
+
+    assert len(items) == 5
+
+
+def test_baris_grand_total_bukan_item():
+    """Kasus nyata: "GRAND TOTAL" tersalin ke semua sel judul; dulu terbaca item "GRAND"."""
+    md = (
+        "| No | Detail Item | Qty | Satuan | Periode (Bln) | Harga. Bulanan | Harga. Total |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| 1 | Layanan Contoh | 1 | Paket | 6 | 1.000.000 | 6.000.000 |\n"
+        "| GRAND TOTAL | GRAND TOTAL | GRAND TOTAL | GRAND TOTAL | GRAND TOTAL "
+        "| 1.000.000 | 6.000.000 |\n"
+        "| PPN 11% | PPN 11% | | | | | 660.000 |\n"
+    )
+
+    kelompok = extract_item_groups_from_markdown_tables(md, doc_type="contract")
+
+    assert [i["Deskripsi Item/Barang/Pekerjaan"] for g in kelompok for i in g] == ["Layanan Contoh"]
+
+
+def test_harga_bulanan_di_bawah_judul_kelompok_dibaca_sebagai_harga_satuan():
+    kolom = detect_item_columns(
+        [
+            "No",
+            "Detail Item",
+            "Qty",
+            "Satuan",
+            "Periode (Bln)",
+            "Harga (IDR). Bulanan",
+            "Harga (IDR). Total",
+        ]
+    )
+
+    assert kolom["price"] == ["Harga (IDR). Bulanan"]
+    assert kolom["total"] == ["Harga (IDR). Total"]
+
+
+def test_kolom_total_qty_adalah_volume_bukan_harga_dan_nama_produk_adalah_deskripsi():
+    """Kasus nyata (lisensi per pengguna): "Total Qty" dulu masuk kolom harga total, sehingga
+    item gratis bernilai sebesar volumenya, dan deskripsi diambil dari kolom Part Number."""
+    kolom = detect_item_columns(
+        [
+            "No",
+            "Part Number",
+            "Product Name",
+            "Qty Kampus A",
+            "Qty Kampus B",
+            "Total Qty",
+            "Period (Month)",
+            "Harga Satuan/Bulan",
+            "Total Harga/Tahun",
+        ]
+    )
+
+    assert kolom["desc"] == "Product Name"
+    assert kolom["qty"] == "Total Qty"
+    assert kolom["total"] == ["Total Harga/Tahun"]
+
+
+def test_item_gratis_tetap_item_bernilai_nol_bukan_judul_kelompok():
+    md = (
+        "| No | Part Number | Product Name | Total Qty | Harga Satuan | Total Harga |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | PN-1 | Lisensi Contoh A | 10 | 1.000 | 10.000 |\n"
+        "| 2 | PN-2 | Lisensi Contoh B | 400 | Free | Free |\n"
+        "| 3 | PN-3 | Lisensi Contoh C | 5 | 0 | 0 |\n"
+        "| 4 | PN-4 | Lisensi Contoh D | 2 | 3.000 | 6.000 |\n"
+    )
+
+    items = [
+        SPHItemDetail.model_validate(i)
+        for g in extract_item_groups_from_markdown_tables(md, doc_type="sph")
+        for i in g
+    ]
+
+    assert [(i.nama_item, i.total_harga) for i in items] == [
+        ("Lisensi Contoh A", 10_000),
+        ("Lisensi Contoh B", 0),
+        ("Lisensi Contoh C", 0),
+        ("Lisensi Contoh D", 6_000),
+    ]
+    assert all(i.kategori is None for i in items)
+    assert items[1].keterangan == "Free"
+
+
+# Konteks baris ringkasan. Baris "Subtotal" di tabel berkolom bulanan memuat dua angka:
+# jumlah kolom bulanan dan jumlah kolom total. Kasus nyata (SPH lisensi 12 bulan): LLM
+# mengambil angka bulanan sebagai Subtotal, padahal jumlah itemnya sama dengan angka kedua.
+TABEL_SUBTOTAL_DUA_KOLOM = """
+| No | Uraian | Jumlah | Periode (bln) | Harga Satuan. MRC | Harga Total. MRC |
+|---|---|---|---|---|---|
+| 1 | Lisensi Contoh | 1 | 12 | 1.000.000 | 12.000.000 |
+| 2 | Dukungan Contoh | 1 | 12 | 500.000 | 6.000.000 |
+| Subtotal (Sebelum PPN) | Subtotal (Sebelum PPN) | | | 1.500.000 | 18.000.000 |
+"""
+
+
+def _item_sph(md):
+    return [
+        SPHItemDetail.model_validate(i)
+        for g in extract_item_groups_from_markdown_tables(md, doc_type="sph")
+        for i in g
+    ]
+
+
+def test_subtotal_dari_kolom_bulanan_diganti_angka_kolom_total_di_baris_yang_sama():
+    from types import SimpleNamespace
+
+    from app.extractors.reconcile import koreksi_subtotal_salah_kolom
+
+    ext = SimpleNamespace(subtotal=1_500_000.0)
+
+    koreksi_subtotal_salah_kolom(
+        ext,
+        "subtotal",
+        _item_sph(TABEL_SUBTOTAL_DUA_KOLOM),
+        "total_harga",
+        TABEL_SUBTOTAL_DUA_KOLOM,
+    )
+
+    assert ext.subtotal == 18_000_000
+
+
+def test_subtotal_yang_tidak_ada_di_baris_ringkasan_tidak_diganti():
+    """Selisih saja tidak cukup: tanpa bukti salah kolom, nilai LLM dibiarkan dan aturan
+    validasi yang menandainya."""
+    from types import SimpleNamespace
+
+    from app.extractors.reconcile import koreksi_subtotal_salah_kolom
+
+    ext = SimpleNamespace(subtotal=17_000_000.0)
+
+    koreksi_subtotal_salah_kolom(
+        ext,
+        "subtotal",
+        _item_sph(TABEL_SUBTOTAL_DUA_KOLOM),
+        "total_harga",
+        TABEL_SUBTOTAL_DUA_KOLOM,
+    )
+
+    assert ext.subtotal == 17_000_000
+
+
+# Uji 48 SPH/kontrak yang belum pernah dilihat sistem (15 Okt 2026). Nama dan angka rekaan.
+def test_dua_angka_yang_tertempel_dalam_satu_sel_dipisah_ke_harga_satuan_dan_jumlah():
+    """Kasus nyata: sel harga satuan kosong dan sel jumlah berisi dua nominal yang tertempel;
+    dulu terbaca puluhan kuadriliun."""
+    md = (
+        "| No | Spesifikasi Barang | Qty | Sat | Harga Sat (Rp) | Jumlah (Rp) |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | Lisensi Contoh 10 TB | 10 | Paket | | 5.000.00050.000.000 |\n"
+        "| | Total Harga | | | | 50.000.000 |\n"
+    )
+
+    items = _item_sph(md)
+
+    assert [(i.harga_satuan, i.total_harga) for i in items] == [(5_000_000, 50_000_000)]
+
+
+def test_angka_dengan_grup_ribuan_rusak_tidak_terbaca_sebagai_angka_raksasa():
+    from app.extractors.deterministic.numbers import parse_id_number
+
+    assert parse_id_number("5.000.00050.000.000") is None
+    assert parse_id_number("5.000.000 50.000.000") is None
+    assert parse_id_number("1.500.000.-") == 1_500_000
+
+
+def test_baris_berlabel_jumlah_bukan_item():
+    md = (
+        "| No | Uraian | Qty | Satuan | Harga Satuan (Rp) | Jumlah (Rp) |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | Barang Contoh A | 2 | Unit | 1.000.000 | 2.000.000 |\n"
+        "| 2 | Barang Contoh B | 1 | Unit | 3.000.000 | 3.000.000 |\n"
+        "| | Jumlah Harga | | | | 5.000.000 |\n"
+        "| JUMLAH (sebelum PPN) | JUMLAH (sebelum PPN) | JUMLAH (sebelum PPN) | | 4.000.000 "
+        "| 5.000.000 |\n"
+    )
+
+    assert [i.nama_item for i in _item_sph(md)] == ["Barang Contoh A", "Barang Contoh B"]
+
+
+def test_baris_bernomor_dengan_qty_tanpa_harga_adalah_item_bukan_judul_kelompok():
+    """Kasus nyata (lisensi): baris gratis dengan sel harga kosong dulu dianggap judul
+    kelompok, lalu namanya terpasang sebagai kategori item berikutnya."""
+    md = (
+        "| No | Uraian Barang/Jasa | Total Qty | Satuan | Harga Satuan (Rp) | Jumlah (Rp) |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | Lisensi Contoh A | 20 | Unit | 1.000 | 20.000 |\n"
+        "| 2 | Lisensi Contoh B Gratis | 800 | Unit | | |\n"
+        "| 3 | Lisensi Contoh C | 4 | Unit | 5.000 | 20.000 |\n"
+    )
+
+    items = _item_sph(md)
+
+    assert [(i.nama_item, i.total_harga) for i in items] == [
+        ("Lisensi Contoh A", 20_000),
+        ("Lisensi Contoh B Gratis", None),
+        ("Lisensi Contoh C", 20_000),
+    ]
+    assert all(i.kategori is None for i in items)
+
+
+def test_judul_kelompok_tanpa_nomor_tetap_jadi_kategori():
+    md = (
+        "| No | Uraian | Vol | Sat | Harga Satuan | Jumlah Harga |\n"
+        "|---|---|---|---|---|---|\n"
+        "| | Pendampingan Onsite | | | | |\n"
+        "| 1 | Tiket Contoh | 3 | Orang | 1.000.000 | 3.000.000 |\n"
+    )
+
+    items = _item_sph(md)
+
+    assert [(i.nama_item, i.kategori) for i in items] == [("Tiket Contoh", "Pendampingan Onsite")]
+
+
+def test_baris_bernomor_berharga_dengan_uraian_kosong_tetap_dihitung():
+    """Kasus nyata: sel uraian satu baris tidak terbaca OCR. Item dibuang berarti jumlah item
+    tidak pernah cocok dengan total; uraiannya dibiarkan kosong untuk diisi PM."""
+    md = (
+        "| No | Uraian | Vol | Sat | Harga Satuan | Jumlah Harga |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | Barang Contoh A | 1 | Paket | 1.000.000 | 1.000.000 |\n"
+        "| 2 | | 1 | Paket | 500.000 | 500.000 |\n"
+        "| Total | Total | | | | 1.500.000 |\n"
+    )
+
+    items = _item_sph(md)
+
+    assert [(i.nama_item, i.total_harga) for i in items] == [
+        ("Barang Contoh A", 1_000_000),
+        ("", 500_000),
+    ]

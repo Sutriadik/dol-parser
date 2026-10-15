@@ -12,18 +12,23 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.extractors.deterministic.numbers import (
+    TARIF_PPN_UMUM,
     amounts_equal,
     confirmed_amounts,
     numbers_in_text,
     terbilang_to_number,
 )
 from app.logger import logger
-from app.parsers.table_extractor import clean_desc_and_extract_item_no
+from app.parsers.table_extractor import (
+    clean_desc_and_extract_item_no,
+    extract_tables_from_markdown,
+    gabung_sel_gabungan,
+)
 from app.schemas.bast import BASTItemDetail
 from app.schemas.sph import SPHExtractionSchema
 
 SUMMARY_ROW = re.compile(
-    r"^(?:sub\s*total|grand\s*total|total\s*[a-z0-9+]*|jumlah\s*total|total\s*keseluruhan)\b",
+    r"^(?:sub\s*total|grand\s*total|total\s*[a-z0-9+]*|jumlah|jml|total\s*keseluruhan)\b",
     re.IGNORECASE,
 )
 
@@ -52,32 +57,47 @@ def reconcile_items(
     if not table_items:
         return llm_items
 
+    # Rujukan pemilihan tabel adalah isian LLM, maka disaring dulu: hanya nominal yang
+    # tertulis di dokumen yang boleh membuang tabel atau menggabung baris. Total tertulis yang
+    # sudah termasuk PPN ikut dihitung, karena banyak kontrak tidak menulis subtotalnya.
+    tertulis = [
+        r for r in reference_amounts if r and markdown_text and nominal_tertulis(r, markdown_text)
+    ]
+    acuan_tertulis = tertulis + [r / (1 + t) for r in tertulis for t in TARIF_PPN_UMUM]
+
+    def cocok_tertulis(amount: float) -> bool:
+        return any(amounts_equal(amount, r, 1000.0) for r in acuan_tertulis)
+
     def matches_reference(amount: float) -> bool:
-        return any(ref and amounts_equal(amount, ref, 1000.0) for ref in reference_amounts)
+        return cocok_tertulis(amount) or any(
+            ref and amounts_equal(amount, ref, 1000.0) for ref in reference_amounts
+        )
 
     def jumlah(items: list[dict[str, Any]]) -> float:
         return sum(float(t.get(total_alias) or 0) for t in items)
 
-    if table_groups and len(table_groups) > 1 and not matches_reference(jumlah(table_items)):
-        # Bundel kontrak (BA negosiasi + penawaran + nota pesanan) bisa memuat tabel harga yang sama
-        # beberapa kali; menggabungkan semuanya menggandakan item. Barisnya tidak selalu identik,
-        # jadi yang dipilih SATU tabel utuh yang jumlahnya sama dengan nominal tertulis di dokumen.
-        # Rujukan itu isian LLM, maka disaring dulu: tanpa rujukan tertulis, semua tabel tetap
-        # dipakai.
-        tertulis = [
-            r
-            for r in reference_amounts
-            if r and markdown_text and nominal_tertulis(r, markdown_text)
-        ]
-        salinan = [
-            g for g in table_groups if any(amounts_equal(jumlah(g), r, 1000.0) for r in tertulis)
-        ]
-        if salinan:
-            table_items = max(salinan, key=len)
+    if acuan_tertulis and not matches_reference(jumlah(table_items)):
+        # 1) Bundel kontrak (BA negosiasi + penawaran + nota pesanan) bisa memuat tabel harga
+        #    yang sama beberapa kali; menggabungkan semuanya menggandakan item. Barisnya tidak
+        #    selalu identik, jadi yang dipilih SATU tabel utuh yang jumlahnya cocok.
+        # 2) Harga dari sel gabungan tersalin ke setiap sub-baris (gabung_sel_gabungan).
+        kelompok = table_groups or [table_items]
+        rapat = [gabung_sel_gabungan(g) for g in kelompok]
+        kandidat: list[tuple[str, list[dict[str, Any]]]] = []
+        if len(kelompok) > 1:
+            kandidat += [("satu salinan tabel", g) for g in sorted(kelompok, key=len, reverse=True)]
+        kandidat.append(("sub-baris sel gabungan disatukan", [i for g in rapat for i in g]))
+        if len(rapat) > 1:
+            kandidat += [
+                ("satu salinan tabel, sub-baris sel gabungan disatukan", g)
+                for g in sorted(rapat, key=len, reverse=True)
+            ]
+        pilihan = next(((alasan, k) for alasan, k in kandidat if cocok_tertulis(jumlah(k))), None)
+        if pilihan:
+            alasan, table_items = pilihan
             logger.info(
-                f"{len(table_groups)} tabel harga, gabungannya tidak cocok subtotal/total; "
-                f"memakai satu tabel ({len(table_items)} item) yang jumlahnya sama dengan "
-                "nominal tertulis di dokumen"
+                f"Jumlah item tabel tidak cocok subtotal/total; memakai {len(table_items)} item "
+                f"({alasan}) yang jumlahnya sama dengan nominal tertulis di dokumen"
             )
 
     table_ok = matches_reference(jumlah(table_items))
@@ -184,6 +204,44 @@ def prefer_confirmed_amount(extracted: BaseModel, attr: str, markdown_text: str)
         f"{confirmed[0]:,.0f} yang dikonfirmasi oleh terbilangnya."
     )
     setattr(extracted, attr, confirmed[0])
+
+
+def koreksi_subtotal_salah_kolom(
+    extracted: Any, attr: str, items: list[BaseModel], total_attr: str, markdown_text: str
+) -> None:
+    """
+    Ganti subtotal LLM yang terbaca dari kolom lain pada baris ringkasan tabel.
+
+    Kasus nyata (SPH lisensi 12 bulan): baris "Subtotal (Sebelum PPN)" memuat jumlah kolom
+    bulanan dan jumlah kolom total (12 kali lipatnya). LLM mengambil angka pertama,
+    padahal jumlah item sama dengan angka kedua. Penggantian hanya terjadi bila kedua angka
+    ada di baris ringkasan yang sama dan angka penggantinya sama dengan jumlah item, jadi
+    nilainya tetap angka yang tertulis di dokumen, bukan hasil hitungan.
+    """
+    nilai = getattr(extracted, attr, None)
+    totals = [getattr(i, total_attr, None) for i in items]
+    if not nilai or not totals or any(t is None for t in totals):
+        return
+    jumlah_item = float(sum(totals))
+    if amounts_equal(nilai, jumlah_item, 1.0):
+        return
+    for tabel in extract_tables_from_markdown(markdown_text):
+        for baris in tabel["rows"]:
+            sel = [str(v).strip() for k, v in baris.items() if not k.startswith("_")]
+            label = next((v for v in sel if v), "")
+            if not SUMMARY_ROW.match(label):
+                continue
+            angka = numbers_in_text(" | ".join(sel))
+            if any(amounts_equal(nilai, a, 1.0) for a in angka) and any(
+                amounts_equal(jumlah_item, a, 1.0) for a in angka
+            ):
+                logger.warning(
+                    f"{attr}: nilai LLM {nilai:,.0f} diambil dari kolom lain pada baris "
+                    f"'{label}'; memakai {jumlah_item:,.0f} di baris yang sama, yang sama dengan "
+                    "jumlah item."
+                )
+                setattr(extracted, attr, jumlah_item)
+                return
 
 
 def reconcile_bast_items(

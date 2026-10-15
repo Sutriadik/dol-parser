@@ -52,6 +52,7 @@ from app.extractors.reconcile import (  # noqa: F401
     drop_unwritten_sph_totals,
     fill_terbilang_from_text,
     find_terbilang_in_text,
+    koreksi_subtotal_salah_kolom,
     perusahaan_sama,
     prefer_confirmed_amount,
     reconcile_bast_items,
@@ -699,6 +700,9 @@ class OllamaExtractor:
             )
         extracted.items = clean_and_number_items(extracted.items, "deskripsi", "nomor_item")
         self._enrich_item_columns(extracted.items, "deskripsi")
+        koreksi_subtotal_salah_kolom(
+            extracted, "sub_total", extracted.items, "jumlah_harga", markdown_text
+        )
 
         prefer_confirmed_amount(extracted, "total_harga_pekerjaan", markdown_text)
 
@@ -832,6 +836,9 @@ class OllamaExtractor:
             )
         extracted.items = clean_and_number_items(extracted.items, "nama_item", "nomor")
         self._enrich_item_columns(extracted.items, "nama_item")
+        koreksi_subtotal_salah_kolom(
+            extracted, "subtotal", extracted.items, "total_harga", markdown_text
+        )
 
         # --- Sanity guard PPN & Grand Total ---
         # LLM kadang mengembalikan angka PPN / Grand Total yang absurd (mis. digit dua

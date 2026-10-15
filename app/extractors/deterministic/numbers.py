@@ -14,6 +14,13 @@ from typing import Any
 _CURRENCY_PREFIX = re.compile(r"^\s*(?:Rp\.?|IDR)\s*", re.IGNORECASE)
 _TRAILING_SEN = re.compile(r",\s*(?:-+|0{2})\s*$")
 _ID_THOUSANDS = re.compile(r"^\d{1,3}(?:\.\d{3})+$")
+# Koma desimal yang terbaca titik oleh OCR: "3.200.000.00". Grup ribuan selalu tiga digit,
+# jadi dua digit di belakang titik terakhir pasti sen.
+_ID_DECIMAL_DOT = re.compile(r"^\d{1,3}(?:\.\d{3})+\.\d{2}$")
+# Titik ribuan yang terbaca spasi oleh OCR: "7.350 000". Hanya spasi sesudah grup ribuan
+# bertitik dan sebelum tiga digit terakhir; "1 2" (sel volume terbelah) dan dua angka yang
+# bersebelahan ("5.000.000 50.000.000") tidak disatukan.
+_SPASI_RIBUAN = re.compile(r"(?<=\.\d{3})\s(?=\d{3}(?![\d.]))")
 _EN_THOUSANDS = re.compile(r"^\d{1,3}(?:,\d{3})+$")
 _NUMBER_TOKEN = re.compile(r"\d[\d.,]*\d|\d")
 
@@ -42,10 +49,11 @@ def parse_id_number(value: Any) -> float | None:
 
     s = _CURRENCY_PREFIX.sub("", str(value)).strip()
     s = _TRAILING_SEN.sub("", s)
+    s = _SPASI_RIBUAN.sub(".", s)
     s = re.sub(r"[\s ]", "", s)
     s = re.sub(r"[^\d.,\-]", "", s)
     negative = s.startswith("-")
-    s = s.strip("-")
+    s = s.strip("-").rstrip(".")  # "1.500.000.-"
     if not re.search(r"\d", s):
         return None
 
@@ -56,8 +64,15 @@ def parse_id_number(value: Any) -> float | None:
         else:
             s = s.replace(",", "")  # 1,234.56
     elif has_dot:
-        if _ID_THOUSANDS.match(s) or s.count(".") > 1:
+        if _ID_DECIMAL_DOT.match(s):
+            s = s[:-3].replace(".", "") + s[-3:]
+        elif _ID_THOUSANDS.match(s):
             s = s.replace(".", "")
+        elif s.count(".") > 1:
+            # Grup ribuan yang bukan tiga digit berarti dua angka yang tertempel
+            # ("5.000.00050.000.000", sel tabel yang digabung OCR) atau nomor/tanggal.
+            # Dulu titiknya dibuang dan hasilnya angka raksasa.
+            return None
     elif has_comma:
         if _EN_THOUSANDS.match(s) and s.count(",") > 1:
             s = s.replace(",", "")
@@ -97,6 +112,11 @@ def format_number_for_matching(value: Any) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
+
+
+# Tarif PPN yang pernah berlaku. Dipakai hanya untuk mencocokkan, tidak pernah untuk mengisi
+# nilai: jumlah item x (1 + tarif) = total tertulis menandakan daftar item sudah lengkap.
+TARIF_PPN_UMUM = (0.10, 0.11, 0.12)
 
 
 def amounts_equal(a: float | None, b: float | None, tolerance: float = 1.0) -> bool:

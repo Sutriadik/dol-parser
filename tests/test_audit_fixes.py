@@ -39,6 +39,10 @@ ROOT = Path(__file__).resolve().parent.parent
         ("12.500", 12500.0),
         ("1,234,567.89", 1234567.89),
         ("150000000.0", 150000000.0),
+        # OCR membaca koma desimal sebagai titik, atau titik ribuan sebagai spasi (kontrak
+        # pindaian): dulu 3.200.000.00 terbaca 320 juta dan 7.350 000,00 terbaca 7,35.
+        ("3.200.000.00", 3200000.0),
+        ("7.350 000,00", 7350000.0),
         ("abc", None),
         ("", None),
     ],
@@ -414,6 +418,37 @@ def test_contract_validation_rules():
         "terbilang_matches_amount",
         "parties_distinct",
     } <= rules
+
+
+def test_jumlah_item_cocok_dengan_total_termasuk_ppn_bila_subtotal_tidak_tertulis():
+    """Kontrak yang hanya menulis nilai termasuk PPN: jumlah item 300 juta dan total 333
+    juta (PPN 11%) bukan selisih, jadi harga item tidak boleh diturunkan statusnya."""
+    data = {
+        "sub total": None,
+        "Total Harga Pekerjaan": 333_000_000,
+        "List Item/Barang": [
+            {"volume": 1, "Harga Satuan": 100_000_000, "Jumlah Harga": 100_000_000},
+            {"volume": 1, "Harga Satuan": 200_000_000, "Jumlah Harga": 200_000_000},
+        ],
+    }
+    assert "items_sum_matches_subtotal" not in {i.rule for i in validate_contract(data).issues}
+
+    data["List Item/Barang"][1]["Jumlah Harga"] = 150_000_000
+    data["List Item/Barang"][1]["Harga Satuan"] = 150_000_000
+    assert "items_sum_matches_subtotal" in {i.rule for i in validate_contract(data).issues}
+
+
+def test_item_bernilai_nol_tetap_ikut_pemeriksaan_jumlah():
+    """Item gratis (Rp 0) dulu dianggap tidak punya jumlah, sehingga pemeriksaan jumlah item
+    terhadap subtotal dilewati untuk seluruh tabel."""
+    data = {
+        "Subtotal": 10_000,
+        "Daftar Penawaran Harga": [
+            {"Volume / Qty": 1, "Harga Satuan": 12_000, "Total Harga": 12_000},
+            {"Volume / Qty": 5, "Harga Satuan": 0, "Total Harga": 0},
+        ],
+    }
+    assert "items_sum_matches_subtotal" in {i.rule for i in validate_sph(data).issues}
 
 
 def test_sph_line_total_accepts_period_multiplier():

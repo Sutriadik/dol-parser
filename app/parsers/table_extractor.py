@@ -262,9 +262,27 @@ DESC_KEYWORDS = [
     "jasa",
     "produk",
 ]
+# Dipakai hanya bila DESC_KEYWORDS tidak menemukan apa-apa, supaya tabel yang sudah terbaca
+# benar tidak berganti kolom deskripsi. Kasus nyata (lisensi per pengguna): judul "Product
+# Name" tidak dikenali, lalu deskripsi diambil dari kolom kedua, "Part Number".
+DESC_KEYWORDS_CADANGAN = ["product", "product name", "nama", "name", "nama produk"]
+_BUKAN_DESKRIPSI = ["code", "kode", "number", "nomor", "part", "sku", "serial"]
 QTY_KEYWORDS = ["vol", "volume", "qty", "quantity", "jumlah", "jml", "kuantitas", "kuantiti"]
+# Volume yang dijumlahkan dari beberapa kolom ("Qty Kampus A", "Qty Kampus B", "Total Qty").
+# "Jumlah"/"jml" tidak termasuk: "Jumlah Total" hampir selalu nominal.
+_QTY_TOTAL_KEYWORDS = ["qty", "quantity", "vol", "volume", "kuantitas"]
 UNIT_KEYWORDS = ["sat", "satuan", "unit", "uom"]
-PERIOD_KEYWORDS = ["periode", "perlode", "durasi", "bln", "bulan", "jangka waktu", "masa"]
+PERIOD_KEYWORDS = [
+    "periode",
+    "perlode",
+    "period",
+    "durasi",
+    "bln",
+    "bulan",
+    "month",
+    "jangka waktu",
+    "masa",
+]
 UNIT_PRICE_KEYWORDS = [
     "harga satuan",
     "harga sat",  # singkatan di SPH/SPK berformat LKPP: "Harga Sat (Rp)" | "Jml Harga (Rp)"
@@ -274,6 +292,8 @@ UNIT_PRICE_KEYWORDS = [
     "harga bulanan",
     "mrc",
     "otc",
+    # Sub-judul di bawah kelompok harga: "Harga Pekerjaan (IDR). Bulanan" | "... . Total".
+    "bulanan",
 ]
 TOTAL_KEYWORDS = [
     "total harga",
@@ -313,10 +333,22 @@ def detect_item_columns(headers: list[str]) -> dict[str, Any]:
     # "no" tidak masuk exclude: RapidOCR kadang menggabungkan kolom "No." ke header tetangga
     # ("Uraian Pekerjaan/ Layanan. No"), dan exclude "no" membuat header itu ditolak sehingga
     # Deskripsi terisi kolom volume.
-    desc_col = _find_col(headers, DESC_KEYWORDS, _PRICE_WORDS)
+    desc_col = _find_col(headers, DESC_KEYWORDS, _PRICE_WORDS + _BUKAN_DESKRIPSI) or _find_col(
+        headers, DESC_KEYWORDS_CADANGAN, _PRICE_WORDS + _BUKAN_DESKRIPSI
+    )
     if not desc_col:
         desc_col = headers[1] if len(headers) > 1 else headers[0]
-    qty_col = _find_col(headers, QTY_KEYWORDS, _PRICE_WORDS + ["group", "titik", "pembayaran"])
+    bukan_uang = [w for w in _PRICE_WORDS if w != "total"]
+    qty_total = [
+        h
+        for h in headers
+        if _header_matches(h, ["total"]) and _header_matches(h, _QTY_TOTAL_KEYWORDS, bukan_uang)
+    ]
+    qty_col = (
+        qty_total[-1]
+        if qty_total
+        else _find_col(headers, QTY_KEYWORDS, _PRICE_WORDS + ["group", "titik", "pembayaran"])
+    )
     price = [
         h
         for h in headers
@@ -325,7 +357,8 @@ def detect_item_columns(headers: list[str]) -> dict[str, Any]:
     total = [
         h
         for h in headers
-        if _header_matches(
+        if h not in qty_total
+        and _header_matches(
             h,
             TOTAL_KEYWORDS,
             ["harga satuan", "satuan harga", "unit price", "sub total", "subtotal"],
@@ -379,6 +412,43 @@ def jenis_biaya_baris(row: dict[str, Any], kolom_harga: list[str]) -> str | None
     return jenis.pop() if jenis else None
 
 
+_BARIS_RINGKASAN = re.compile(
+    r"^(?:sub\s*total|grand\s*total|total\s*[a-z0-9]*|jumlah|jml|total\s*keseluruhan"
+    r"|ppn|vat)\b",
+    re.IGNORECASE,
+)
+_SEL_GRATIS = re.compile(r"^(?:free|gratis|(?:rp\.?\s*)?0+(?:[.,]0+)?(?:,-)?)$", re.IGNORECASE)
+
+
+# Dua nominal tertempel dalam satu sel: "5.000.00050.000.000" atau "5.000.000 50.000.000".
+_DUA_NOMINAL = re.compile(
+    r"^(?:rp\.?\s*)?(\d{1,3}(?:\.\d{3})+)(?:,\d{2})?\s*(\d{1,3}(?:\.\d{3})+)(?:,\d{2})?$",
+    re.IGNORECASE,
+)
+
+
+def _pisah_dua_nominal(
+    r: dict[str, Any], price_cols: list[str], total_cols: list[str]
+) -> dict[str, Any]:
+    """
+    Kasus nyata (SPH lisensi): sel harga satuan kosong dan sel jumlah berisi
+    "5.000.00050.000.000", yaitu harga satuan dan jumlah yang digabung OCR. Keduanya angka
+    tertulis, jadi dipisah ke kolomnya masing-masing. Hanya untuk tabel satu kolom harga dan
+    satu kolom jumlah, dan bila angka pertama tidak lebih besar dari angka kedua.
+    """
+    if len(price_cols) != 1 or len(total_cols) != 1 or str(r.get(price_cols[0]) or "").strip():
+        return r
+    m = _DUA_NOMINAL.match(str(r.get(total_cols[0]) or "").strip())
+    if not m or parse_indonesian_number(m.group(1)) > parse_indonesian_number(m.group(2)):
+        return r
+    return {**r, price_cols[0]: m.group(1), total_cols[0]: m.group(2)}
+
+
+def _keterangan_gratis(sel_harga: list[str]) -> str | None:
+    """Teks "Free"/"Gratis" dari sel harga, supaya PM melihat alasan harganya nol."""
+    return next((v for v in sel_harga if re.fullmatch(r"(?i)free|gratis", v)), None)
+
+
 def clean_desc_and_extract_item_no(desc: str, current_no: str = "") -> tuple[str, str]:
     """
     Memisahkan nomor urut item yang mungkin terbawa di awal teks deskripsi/pekerjaan
@@ -403,6 +473,63 @@ def clean_desc_and_extract_item_no(desc: str, current_no: str = "") -> tuple[str
         return extracted_no, clean_text
 
     return current_no, cleaned
+
+
+_KUNCI_NOMOR = ("Nomor Item", "No")
+_KUNCI_DESKRIPSI = ("Deskripsi Item/Barang/Pekerjaan", "Nama Barang/Jasa")
+_KUNCI_TOTAL = ("Jumlah Harga", "Total Harga")
+
+
+def gabung_sel_gabungan(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Satukan sub-baris yang berasal dari satu sel harga gabungan (rowspan).
+
+    Satu item bisa terdiri atas beberapa sub-baris (mis. tiga kode produk untuk satu
+    perpanjangan lisensi) dengan nomor dan harga di sel yang digabung. Docling menyalin isi
+    sel gabungan ke setiap sub-baris, jadi harga item itu terhitung sekali per sub-baris.
+    Baris berurutan dengan nomor yang sama dan harga satuan yang sama dianggap satu item:
+    deskripsi dan atribut yang berbeda digabung, harga diambil sekali.
+
+    Pola yang sama bisa muncul pada item asli yang kebetulan bernomor dan berharga sama,
+    jadi hasil fungsi ini hanya dipakai bila jumlahnya cocok dengan nominal tertulis
+    (reconcile_items).
+    """
+    hasil: list[dict[str, Any]] = []
+    for item in items:
+        prev = hasil[-1] if hasil else None
+        nomor = next((item.get(k) for k in _KUNCI_NOMOR if k in item), None)
+        if (
+            prev is not None
+            and nomor
+            and nomor == next((prev.get(k) for k in _KUNCI_NOMOR if k in prev), None)
+            and item.get("Harga Satuan")
+            and item.get("Harga Satuan") == prev.get("Harga Satuan")
+        ):
+            prev["_sub_baris"].append(item)
+            continue
+        hasil.append({**item, "_sub_baris": [item]})
+
+    for item in hasil:
+        sub = item.pop("_sub_baris")
+        if len(sub) == 1:
+            continue
+        for k in _KUNCI_DESKRIPSI:
+            if k in item:
+                item[k] = "; ".join(dict.fromkeys(s[k] for s in sub if s.get(k)))
+        for k in _KUNCI_TOTAL:
+            if k in item:
+                # Nilai terbanyak di antara sub-baris; sisa OCR ("2") di satu sub-baris kalah.
+                nilai = [s.get(k) for s in sub if s.get(k)]
+                item[k] = max(nilai, key=nilai.count) if nilai else item[k]
+        atribut: dict[str, list[str]] = {}
+        for s in sub:
+            for k, v in (s.get("Atribut Tambahan") or {}).items():
+                atribut.setdefault(k, [])
+                if v not in atribut[k]:
+                    atribut[k].append(v)
+        if atribut:
+            item["Atribut Tambahan"] = {k: ", ".join(v) for k, v in atribut.items()}
+    return hasil
 
 
 def extract_items_from_markdown_tables(
@@ -458,8 +585,18 @@ def extract_item_groups_from_markdown_tables(
             continue
 
         for r in table["rows"]:
+            r = _pisah_dua_nominal(r, price_cols, total_cols)
             raw_desc = r.get(desc_col, "").strip()
-            if not raw_desc:
+            # Baris bernomor yang berharga tetap item walau uraiannya tidak terbaca OCR; uraian
+            # dibiarkan kosong untuk diisi PM. Dulu baris ini dibuang dan jumlah item tidak
+            # pernah cocok dengan total.
+            no_awal = str(r.get("No.", r.get("No", r.get("Nomor", r.get("Nomor Item", "")))))
+            tanpa_uraian = (
+                not raw_desc
+                and no_awal.strip().isdigit()
+                and any(parse_indonesian_number(r.get(c, 0)) > 0 for c in price_cols + total_cols)
+            )
+            if not raw_desc and not tanpa_uraian:
                 continue
 
             # Filter baris header kolom duplicate (misal: "No")
@@ -491,17 +628,12 @@ def extract_item_groups_from_markdown_tables(
                 raw_desc, str(no_val).strip() if no_val else ""
             )
 
-            if not clean_desc:
+            if not clean_desc and not tanpa_uraian:
                 continue
 
-            # Filter baris ringkasan / subtotal / grandtotal
-            if bool(
-                re.match(
-                    r"^(?:subtotal|grandtotal|total\s*[a-z0-9]*|jumlah\s*total|total\s*keseluruhan)\b",
-                    clean_desc,
-                    re.IGNORECASE,
-                )
-            ):
+            # Filter baris ringkasan / subtotal / grandtotal. Teks mentah ikut dicek: pembersih
+            # deskripsi memotong "GRAND TOTAL" menjadi "GRAND", yang dulu lolos sebagai item.
+            if _BARIS_RINGKASAN.match(clean_desc) or _BARIS_RINGKASAN.match(raw_desc):
                 continue
 
             # Jika 'No' berisi huruf kategori tunggal (A, B) tanpa harga, skip
@@ -531,6 +663,13 @@ def extract_item_groups_from_markdown_tables(
                 if val > 0:
                     h_tot = val
 
+            # Harga yang tertulis "Free" atau 0 adalah item tanpa biaya, bukan judul kelompok.
+            # Kasus nyata (lisensi per pengguna): baris "Free" dulu dilewati dan namanya menjadi
+            # kategori untuk item-item di bawahnya.
+            sel_harga = [str(r.get(c) or "").strip() for c in price_cols + total_cols]
+            gratis = any(_SEL_GRATIS.match(v) for v in sel_harga)
+            nol = 0.0 if gratis else None
+
             # Harga yang tidak tertulis dibiarkan kosong, TIDAK dihitung dari volume x harga
             # satuan (aturan 3 AGENTS.md). Dulu total yang tidak terbaca diisi vol x harga:
             # satu SPH jasa menulis Jumlah per baris, tapi kolomnya tidak dikenali dan volume
@@ -557,7 +696,16 @@ def extract_item_groups_from_markdown_tables(
 
             # Baris tanpa harga di tabel BoQ = judul kelompok atau header yang terulang (hasil OCR),
             # bukan item yang ditagih. Untuk BAST, tidak adanya harga itu normal -- jangan di-skip.
-            if require_price and h_sat == 0.0 and h_tot == 0.0:
+            # Kecuali baris bernomor yang volumenya tertulis: itu item tanpa harga (lisensi
+            # gratis dengan sel harga kosong). Dulu namanya menjadi kategori item berikutnya.
+            item_tanpa_harga = str(no_val).isdigit() and bool(vol_str) and vol is not None
+            if (
+                require_price
+                and h_sat == 0.0
+                and h_tot == 0.0
+                and not gratis
+                and not item_tanpa_harga
+            ):
                 if not _header_matches(clean_desc, DESC_KEYWORDS + ["uralan"]):
                     current_kategori = clean_desc
                 continue
@@ -581,10 +729,10 @@ def extract_item_groups_from_markdown_tables(
                     "volume": vol,
                     "unit": unit,
                     "Periode/Durasi": periode,
-                    "Harga Satuan": h_sat or None,
-                    "Jumlah Harga": h_tot or None,
+                    "Harga Satuan": h_sat or nol,
+                    "Jumlah Harga": h_tot or nol,
                     "Jenis Biaya": jenis_biaya_baris(r, price_cols + total_cols),
-                    "Keterangan": None,
+                    "Keterangan": _keterangan_gratis(sel_harga),
                     "Atribut Tambahan": extra if extra else None,
                 }
             elif doc_type.lower() == "bast":
@@ -608,10 +756,10 @@ def extract_item_groups_from_markdown_tables(
                     "Volume / Qty": vol,
                     "Satuan": unit,
                     "Periode/Durasi": periode,
-                    "Harga Satuan": h_sat or None,
-                    "Total Harga": h_tot or None,
+                    "Harga Satuan": h_sat or nol,
+                    "Total Harga": h_tot or nol,
                     "Jenis Biaya": jenis_biaya_baris(r, price_cols + total_cols),
-                    "Keterangan": None,
+                    "Keterangan": _keterangan_gratis(sel_harga),
                     "Atribut Tambahan": extra if extra else None,
                 }
             extracted_items.append(item_dict)

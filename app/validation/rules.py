@@ -11,10 +11,15 @@ from collections.abc import Callable
 from typing import Any
 
 from app.extractors.deterministic.dates import find_dates, parse_id_date
-from app.extractors.deterministic.numbers import amounts_equal, parse_id_number, terbilang_to_number
+from app.extractors.deterministic.numbers import (
+    TARIF_PPN_UMUM,
+    amounts_equal,
+    parse_id_number,
+    terbilang_to_number,
+)
 from app.schemas.evidence import Severity, ValidationIssue, ValidationReport
 
-RULE_VERSION = "rules-2026.10.1"
+RULE_VERSION = "rules-2026.10.2"
 # Toleransi absolut untuk selisih pembulatan PPN/harga satuan. Toleransi relatif (0.5%) sempat
 # dicoba tapi meloloskan terbilang yang salah ~Rp824 ribu pada nilai kontrak Rp174 juta.
 ROUNDING_TOLERANCE = 1000.0
@@ -143,10 +148,12 @@ def _check_items(
     line_sum = 0.0
     all_lines_have_total = bool(items)
     for idx, item in enumerate(items):
+        # Jumlah 0 tetap jumlah (item gratis); hanya jumlah yang kosong yang membatalkan
+        # pemeriksaan total. Dulu satu item "Free" melewatkan pemeriksaan seluruh tabel.
         qty, price, line_total = (
             _num(item.get(qty_key)),
             _num(item.get(price_key)),
-            _num(item.get(line_total_key)),
+            parse_id_number(item.get(line_total_key)),
         )
         if line_total is None:
             all_lines_have_total = False
@@ -177,11 +184,13 @@ def _check_items(
 
     c.rule("items_sum_matches_subtotal")
     subtotal, total = _num(data.get(subtotal_key)), _num(data.get(total_key))
+    # Bila subtotal tidak tertulis, total yang sudah termasuk PPN juga sah sebagai acuan.
+    termasuk_ppn = not subtotal and any(_close(line_sum * (1 + t), total) for t in TARIF_PPN_UMUM)
     if (
         all_lines_have_total
         and line_sum
         and (subtotal or total)
-        and not (_close(line_sum, subtotal) or _close(line_sum, total))
+        and not (_close(line_sum, subtotal) or _close(line_sum, total) or termasuk_ppn)
     ):
         # Setiap harga & jumlah item disebut satu per satu: status bukti dicocokkan per nama
         # field persis, jadi peringatan atas nama "List Item/Barang" saja membiarkan harga item
