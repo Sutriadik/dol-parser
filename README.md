@@ -221,6 +221,33 @@ dicari di teks yang sama dengan yang dibaca LLM.
   jabatannya sama, keempat field itu ditandai. Pola ini muncul saat blok tanda tangan dua
   kolom diratakan OCR dan penandatangannya tertukar.
 
+### Membaca tabel harga
+
+Item diambil dari tabel markdown secara deterministik; LLM tidak mengetik ulang tabel. Pola
+yang sudah ditangani, semuanya dari dokumen nyata:
+
+- **Sel harga gabungan.** Satu item bisa punya beberapa sub-baris (misalnya tiga kode
+  produk) dengan satu sel harga yang digabung. Docling menyalin sel itu ke setiap sub-baris,
+  jadi harganya terhitung berkali-kali. Sub-baris yang nomor dan harga satuannya sama
+  disatukan, tetapi hanya bila jumlahnya kemudian cocok dengan nominal yang tertulis di
+  dokumen: subtotal, atau total yang sudah termasuk PPN 10–12%.
+- **Salinan tabel.** Bundel kontrak sering memuat tabel harga yang sama dua-tiga kali. Yang
+  dipakai satu salinan yang jumlahnya cocok dengan nominal tertulis.
+- **Kolom yang mirip.** "Total Qty" adalah volume, bukan harga. Baris bertulisan `Free` atau
+  `0` adalah item bernilai nol, bukan judul kelompok. Baris Jumlah, GRAND TOTAL, dan PPN
+  bukan item.
+- **Baris yang tidak lengkap.** Baris bernomor dengan volume tapi tanpa harga adalah item
+  tanpa harga, bukan judul kelompok. Baris bernomor yang berharga tetap dihitung walau
+  uraiannya tidak terbaca; uraiannya dikosongkan untuk diisi PM. Dua nominal yang tertempel
+  OCR dalam satu sel (`5.000.00050.000.000`) dipisah ke harga satuan dan jumlah; di luar
+  tabel, angka dengan grup ribuan rusak dianggap tidak terbaca.
+- **Subtotal salah kolom.** Baris Subtotal di tabel bulanan bisa memuat dua angka (kolom
+  bulanan dan kolom total). Bila LLM mengambil angka yang jumlahnya tidak sama dengan item,
+  subtotal diganti angka lain di baris yang sama yang cocok dengan jumlah item.
+
+Belum tertangani: tabel yang terpotong atau hilang saat parsing. Aturan jumlah item
+menandai kasus ini, jadi harga item dan subtotalnya muncul sebagai `perlu_dicek`.
+
 ---
 
 ## Peta kode

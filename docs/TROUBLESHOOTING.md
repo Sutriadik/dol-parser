@@ -261,6 +261,25 @@ Kadang juga dalam versi Indonesia: `Tidak bisa terhubung ke Ollama di http://127
   sama; dua direktur yang namanya berbeda tidak ditandai.
 - **Yang perlu dilakukan PM:** lihat blok tanda tangan dan tentukan siapa mewakili siapa.
 
+### `Jumlah harga seluruh item tidak sama dengan subtotal maupun total`
+
+- **Arti:** jumlah kolom total semua item tidak sama dengan subtotal, dengan total, ataupun
+  dengan total dikurangi PPN 10–12%. Harga setiap item dan subtotal turun ke `perlu_dicek`.
+- **Penyebab yang pernah ditemui:**
+  - Tabel terpotong di batas halaman saat parsing sehingga sebagian item hilang (kontrak
+    pindaian, 15 Okt 2026).
+  - Sel harga gabungan yang tidak bisa disatukan karena tidak ada nominal tertulis untuk
+    membuktikannya.
+  - LLM mengisi subtotal dengan angka dari bagian lain dokumen.
+- **Yang perlu dilakukan PM:** bandingkan daftar item dengan tabel di PDF, lalu tambahkan
+  item yang hilang atau perbaiki subtotalnya.
+
+### Harga item `Free` berstatus `tidak_ada_di_dokumen`
+
+- Sudah diketahui. Item gratis disimpan dengan harga 0 dan Keterangan `Free`. Angka 0 tidak
+  tertulis di tabel, jadi pencari bukti tidak menemukannya. Nilainya benar; PM cukup
+  mengonfirmasi.
+
 ### `Invalid JSON: EOF while parsing a string` / nilai berisi `0123456789012345…`
 
 - **Penyebab:** LLM terjebak mengulang deret angka di satu field sampai kuota token habis,
