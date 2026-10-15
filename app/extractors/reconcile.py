@@ -263,3 +263,319 @@ def sanitize_sph_totals(ext: "SPHExtractionSchema") -> None:
         ext.ppn_nominal = None
     if grand_absurd:
         ext.grand_total = None
+
+
+# Pembanding nama perusahaan. OCR dan LLM menulis nama perusahaan berbeda-beda (PT/PT., Tbk,
+# "(Persero)"), dan klien utama muncul sebagai "Telkom" maupun "Telekomunikasi".
+_ALIAS_PERUSAHAAN = {"telekomunikasi": "telkom"}
+_KATA_UMUM_PERUSAHAAN = {"tbk", "persero", "perseroan", "perusahaan"}
+
+
+def _kata_perusahaan(s: str | None) -> set[str]:
+    kata = re.findall(r"[a-z0-9]{3,}", (s or "").lower())
+    return {_ALIAS_PERUSAHAAN.get(k, k) for k in kata} - _KATA_UMUM_PERUSAHAAN
+
+
+def perusahaan_sama(a: str | None, b: str | None) -> bool:
+    """Nama perusahaan dianggap sama bila salah satunya kosong atau separuh katanya beririsan."""
+    ka, kb = _kata_perusahaan(a), _kata_perusahaan(b)
+    if not ka or not kb:
+        return True
+    return len(ka & kb) / min(len(ka), len(kb)) >= 0.5
+
+
+# Pemasangan penandatangan per kolom. Kasus nyata (Nota Pesanan, kontrak layanan): tanda tangan
+# dua kolom diratakan OCR menjadi satu urutan, lalu LLM memasang direktur penyedia sebagai wakil
+# pemberi kerja dan sebaliknya, berstatus bukti_kuat. Bbox Docling masih menyimpan kolomnya.
+# Nilai LLM tetap sumber utama: kolom dipakai untuk memastikan, mengganti wakil yang ternyata
+# tertulis di kolom pihak lain, dan mengisi yang kosong. Bila kolom tidak meyakinkan (kepala
+# kolom tergabung satu blok, tidak ada pasangan sejajar), tidak ada yang diubah.
+_JABATAN_AWAL = re.compile(
+    r"^(?:direktur|direktor|director|dirut|manager|manajer|mgr|sm|gm|vp|evp|svp|senior|kepala|kabag|"
+    r"kasubag|ketua|sekretaris|pimpinan|presiden|komisaris|asman|staf|staff|officer|head|chief|"
+    r"koordinator|ppk|rektor|dekan|wakil|plt|pgs|pjs)(?:$|[^a-z])",
+    re.IGNORECASE,
+)
+_JABATAN_MENEMPEL = re.compile(r"^(?:SM|GM|VP|MGR)[A-Z][a-z]")  # "SMRegional" hasil OCR
+_DERAU_TTD = {
+    "METERAI",
+    "METERA",
+    "ETERAI",
+    "TEMPEL",
+    "EMPEL",
+    "TEMRES",
+    "METER",
+    "SEPULUH",
+    "SEPULU",
+}
+_ROMAWI = {"I", "II", "III", "IV", "V", "VI", "VII"}
+_LABEL_PIHAK = (
+    ("Pihak Pertama", re.compile(r"^\W*PIHAK\s+(?:PERTAMA|KESATU|KE-?\s*1)\W*$", re.I)),
+    ("Pihak Kedua", re.compile(r"^\W*PIHAK\s+(?:KEDUA|KE-?\s*2)\W*$", re.I)),
+)
+
+
+def _awal_jabatan(token: str) -> bool:
+    t = token.strip(".,:;()")
+    return bool(_JABATAN_AWAL.match(t) or _JABATAN_MENEMPEL.match(t))
+
+
+def _bersihkan_baris_ttd(teks: str) -> list[str]:
+    """Token baris tanda tangan tanpa teks meterai, kode meterai, dan teks logo."""
+    from app.parsers.text_cleaner import fix_common_ocr_typos
+
+    teks = fix_common_ocr_typos(re.sub(r"[_*]+", " ", teks))
+    token = [t for t in teks.split() if not _derau_meterai(t) and not re.search(r"\d", t)]
+    huruf = [t for t in token if re.search(r"[A-Za-z]", t)]
+    # Baris tanda tangan biasanya kapital; teks logo yang menempel tidak ("Be Tel - U").
+    if huruf and sum(t.isupper() for t in huruf) / len(huruf) >= 0.6:
+        token = [t for t in token if not re.search(r"[A-Za-z]", t) or t.isupper()]
+    # Token pendek umumnya sisa logo/OCR, kecuali jabatan dua huruf ("SM", "GM") dan angka romawi.
+    return [
+        t for t in token if t == "&" or len(t.strip(".,-+")) > 2 or t in _ROMAWI or _awal_jabatan(t)
+    ]
+
+
+def _derau_meterai(token: str) -> bool:
+    """Teks meterai dan variannya hasil OCR ("MMTERAI", "ETERAI", "VMETERAY")."""
+    from difflib import SequenceMatcher
+
+    t = re.sub(r"[^A-Z]", "", token.upper())
+    return t in _DERAU_TTD or any(
+        len(t) >= 5 and SequenceMatcher(None, t, k).ratio() >= 0.75 for k in ("METERAI", "TEMPEL")
+    )
+
+
+def _pisah_nama_jabatan(token: list[str]) -> tuple[str | None, str | None]:
+    i = next((k for k, t in enumerate(token) if _awal_jabatan(t)), len(token))
+    nama = [t for t in token[:i] if re.fullmatch(r"[A-Za-z.,'-]+", t)]
+    nama = " ".join(nama).strip(" ,.") if 0 < len(nama) <= 5 else None
+    jabatan = " ".join(token[i:]).strip(" ,.") or None
+    return nama, jabatan
+
+
+def _nama_sama(a: str | None, b: str | None) -> bool:
+    from difflib import SequenceMatcher
+
+    x, y = re.sub(r"[^A-Z]", "", (a or "").upper()), re.sub(r"[^A-Z]", "", (b or "").upper())
+    if len(x) < 3 or len(y) < 3:
+        return False
+    return SequenceMatcher(None, x, y).ratio() >= 0.8 or (
+        min(len(x), len(y)) >= 4 and (x in y or y in x)
+    )
+
+
+def _kepala_kolom(teks: str, perusahaan: dict[str, str | None]) -> str | None:
+    for pihak, pola in _LABEL_PIHAK:
+        if pola.match(teks):
+            return pihak
+    cocok = [
+        p
+        for p, nama in perusahaan.items()
+        if _kata_perusahaan(nama) and _kata_perusahaan(teks) and perusahaan_sama(teks, nama)
+    ]
+    if len(cocok) != 1:
+        return None  # tidak cocok, atau memuat kedua perusahaan sekaligus
+    # Blok kepala kolom isinya nama perusahaan; kalimat yang kebetulan menyebutnya bukan kepala.
+    lebih = len(_kata_perusahaan(teks) - _kata_perusahaan(perusahaan[cocok[0]]))
+    return cocok[0] if lebih <= 4 else None
+
+
+def _kolom_ttd(ir: Any, perusahaan: dict[str, str | None]) -> dict[str, list[tuple]]:
+    """(nama, jabatan) penandatangan per pihak, dari setiap pasangan kepala kolom yang sejajar."""
+    kolom: dict[str, list[tuple]] = {p: [] for p in perusahaan}
+    for page in ir.pages:
+        kepala = [
+            (p, b) for b in page.blocks if b.bbox and (p := _kepala_kolom(b.text, perusahaan))
+        ]
+        for p1, b1 in kepala:
+            for p2, b2 in kepala:
+                kiri_kanan = b1.bbox[2] <= b2.bbox[0]
+                if p1 == p2 or not kiri_kanan or abs(b1.bbox[1] - b2.bbox[1]) > 0.04:
+                    continue
+                batas = (b1.bbox[2] + b2.bbox[0]) / 2
+                atas = max(b1.bbox[3], b2.bbox[3])
+                for pihak, sisi in ((p1, "kiri"), (p2, "kanan")):
+                    calon = [
+                        b
+                        for b in page.blocks
+                        if b.bbox
+                        and b not in (b1, b2)
+                        and atas <= b.bbox[1] <= atas + 0.3
+                        and (
+                            b.bbox[2] <= batas + 0.02
+                            if sisi == "kiri"
+                            else b.bbox[0] >= batas - 0.02
+                        )
+                        and len(b.text) < 160
+                    ]
+                    nama_tunda = None
+                    for b in sorted(calon, key=lambda b: b.bbox[1]):
+                        # Daftar tembusan di bawah tanda tangan berisi jabatan orang lain.
+                        if re.match(r"^\W*tembusan\b", b.text, re.I):
+                            break
+                        nama, jabatan = _pisah_nama_jabatan(_bersihkan_baris_ttd(b.text))
+                        if nama:
+                            kolom[pihak].append((nama, jabatan))
+                            nama_tunda = None if jabatan else len(kolom[pihak]) - 1
+                        elif jabatan and nama_tunda is not None:
+                            kolom[pihak][nama_tunda] = (kolom[pihak][nama_tunda][0], jabatan)
+                            nama_tunda = None
+    return kolom
+
+
+def _calon_terbaik(calon: list[tuple], ir: Any) -> tuple[str | None, str | None]:
+    """Nama yang paling sering muncul (salinan tanda tangan bisa rusak di satu halaman), lalu
+    yang paling lengkap. Jabatan diambil dari salinan lain bila kolom hanya memuat nama."""
+    if not calon:
+        return None, None
+
+    def kunci(n: str) -> str:
+        return re.sub(r"[^A-Z]", "", n.upper())
+
+    skor = {
+        nama: (
+            sum(_nama_sama(nama, n) for n, _ in calon),
+            sum(kunci(nama) == kunci(n) for n, _ in calon),
+            len(nama.split()),
+            nama.isascii(),
+        )
+        for nama, _ in calon
+    }
+    nama = _gabung_ejaan(max(skor, key=skor.get), [n for n, _ in calon])
+    jabatan = [j for n, j in calon if j and _nama_sama(n, nama)]
+    if not jabatan:
+        for page in ir.pages:
+            for b in page.blocks:
+                n, j = _pisah_nama_jabatan(_bersihkan_baris_ttd(b.text))
+                if j and n and _nama_sama(n, nama) and len(b.text) < 160:
+                    jabatan.append(j)
+    if not jabatan:
+        return nama, None
+    return nama, max(jabatan, key=lambda j: (jabatan.count(j), j.isascii(), len(j)))
+
+
+def _gabung_ejaan(nama: str, semua: list[str]) -> str:
+    """Satukan ejaan dari beberapa salinan tanda tangan, kata demi kata. Kasus nyata: satu
+    salinan terbaca "ANDI WIJ'AYA PRASETYO", salinan lain "ANDI WJAYA PRASETYO". Per
+    posisi dipilih kata dengan huruf terbanyak (OCR lebih sering menghilangkan huruf daripada
+    menambah), lalu yang tanpa tanda baca. Apostrof dibuang bila salinan lain tidak memuatnya."""
+    kata = nama.split()
+    sejenis = [n.split() for n in semua if _nama_sama(n, nama) and len(n.split()) == len(kata)]
+    hasil = []
+    for i, k in enumerate(kata):
+        pilihan = [s[i] for s in sejenis] or [k]
+        w = max(pilihan, key=lambda w: (len(re.sub(r"[^A-Za-z]", "", w)), w.isalpha()))
+        if "'" in w and any("'" not in p for p in pilihan):
+            w = w.replace("'", "")
+        hasil.append(w)
+    return " ".join(hasil)
+
+
+_HORMAT_KAMI = re.compile(r"hormat\s+kami", re.IGNORECASE)
+
+
+def _penandatangan_tunggal(ir: Any, perusahaan: dict[str, str | None]) -> dict[str, list[tuple]]:
+    """Surat yang hanya ditandatangani penerbitnya: "Hormat Kami, a.n <perusahaan> / <jabatan>"
+    lalu nama di bawahnya (kasus nyata: SPK dari BUT ke vendor). Nama diambil sebagai bagian akhir
+    terpanjang baris itu yang juga muncul di tempat lain dokumen, karena teks logo sering
+    menempel ("Be Tel / Andi / Wijaya") dan baris itu tidak kapital sehingga filter logo
+    tidak jalan."""
+    seluruh = " ".join(re.sub(r"\s+", " ", b.text) for pg in ir.pages for b in pg.blocks).lower()
+    hasil: dict[str, list[tuple]] = {p: [] for p in perusahaan}
+    for page in ir.pages:
+        for i, b in enumerate(page.blocks):
+            m = _HORMAT_KAMI.search(b.text)
+            if not b.bbox or not m:
+                continue
+            baris = [x.strip() for x in b.text[m.end() :].splitlines() if x.strip()]
+            pihak = [
+                (k, p)
+                for k, x in enumerate(baris)
+                for p, nama in perusahaan.items()
+                if _kata_perusahaan(nama)
+                and len(_kata_perusahaan(nama) & _kata_perusahaan(x)) / len(_kata_perusahaan(nama))
+                >= 0.5
+            ]
+            if len({p for _, p in pihak}) != 1:
+                continue
+            k, p = pihak[0]
+            jabatan = " ".join(baris[k + 1 :]).strip(" ,.") or None
+            if jabatan and not _awal_jabatan(jabatan.split()[0]):
+                jabatan = None
+            for c in page.blocks[i + 1 : i + 4]:
+                if not c.bbox or abs(c.bbox[0] - b.bbox[0]) > 0.1 or c.bbox[1] > b.bbox[3] + 0.25:
+                    continue
+                kata = [
+                    t for t in re.findall(r"[A-Za-z][A-Za-z.'-]*", c.text) if not _awal_jabatan(t)
+                ]
+                nama = next(
+                    (
+                        " ".join(kata[j:])
+                        for j in range(len(kata))
+                        if len(kata) - j <= 5 and seluruh.count(" ".join(kata[j:]).lower()) >= 2
+                    ),
+                    None,
+                )
+                if nama:
+                    hasil[p].append((nama, jabatan))
+                    break
+    return hasil
+
+
+def pasangkan_penandatangan(data: dict[str, Any], ir: Any) -> list[dict[str, Any]]:
+    """
+    Cocokkan wakil & jabatan kedua pihak dengan kolom tanda tangan; ubah `data` di tempat.
+
+    Kembali: daftar perubahan {pihak, jenis: "diganti"|"diisi", lama, baru, perusahaan} untuk
+    catatan PM. Hanya berjalan bila kedua kolom ditemukan.
+    """
+    pihak = {p: data.get(p) or {} for p in ("Pihak Pertama", "Pihak Kedua")}
+    perusahaan = {p: d.get("Nama Perusahaan") for p, d in pihak.items()}
+    kolom = _kolom_ttd(ir, perusahaan)
+    perubahan: list[dict[str, Any]] = []
+    if not all(kolom.values()):
+        # Tanpa pasangan kolom hanya boleh mengisi yang kosong; tidak ada pembanding untuk
+        # menyatakan nilai LLM tertukar.
+        for p, calon in _penandatangan_tunggal(ir, perusahaan).items():
+            d = pihak[p]
+            nama, jabatan = _calon_terbaik(calon, ir)
+            if nama and not d.get("Nama Representative"):
+                d["Nama Representative"] = nama
+                d["Jabatan"] = d.get("Jabatan") or jabatan
+                perubahan.append(
+                    {
+                        "pihak": p,
+                        "jenis": "diisi",
+                        "lama": None,
+                        "baru": nama,
+                        "perusahaan": perusahaan[p],
+                    }
+                )
+        return perubahan
+    lain = {"Pihak Pertama": "Pihak Kedua", "Pihak Kedua": "Pihak Pertama"}
+    for p, d in pihak.items():
+        rep = d.get("Nama Representative")
+        di_sendiri = rep and any(_nama_sama(rep, n) for n, _ in kolom[p])
+        di_lain = rep and any(_nama_sama(rep, n) for n, _ in kolom[lain[p]])
+        nama, jabatan = _calon_terbaik(kolom[p], ir)
+        if not nama or di_sendiri:
+            if di_sendiri and not d.get("Jabatan") and jabatan:
+                d["Jabatan"] = jabatan
+            continue
+        if rep and not di_lain:
+            continue  # nama LLM tidak ada di kolom mana pun: biarkan, jangan menebak
+        jenis = "diganti" if rep else "diisi"
+        perubahan.append(
+            {"pihak": p, "jenis": jenis, "lama": rep, "baru": nama, "perusahaan": perusahaan[p]}
+        )
+        d["Nama Representative"], d["Jabatan"] = (
+            nama,
+            jabatan or (None if rep else d.get("Jabatan")),
+        )
+    if perubahan:
+        logger.info(
+            "Penandatangan dari kolom tanda tangan: "
+            + "; ".join(f"{c['pihak']} {c['jenis']}" for c in perubahan)
+        )
+    return perubahan

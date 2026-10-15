@@ -505,6 +505,38 @@ def note_second_ocr(report: ValidationReport, berbeda: list[dict[str, Any]]) -> 
     return c.report()
 
 
+def note_penandatangan(
+    report: ValidationReport, perubahan: list[dict[str, Any]]
+) -> ValidationReport:
+    """Alasan per field untuk wakil pihak yang diganti atau diisi dari kolom tanda tangan
+    (app/extractors/reconcile.py, pasangkan_penandatangan). Tetap perlu dicek PM: kolom
+    menentukan peran, bukan ejaan nama."""
+    c = _Checker()
+    c.issues, c.checked = list(report.issues), list(report.checked_rules)
+    c.rule("penandatangan_per_kolom")
+    for p in perubahan:
+        if p["jenis"] == "diganti":
+            pesan = (
+                f"Wakil {p['pihak']} diganti mengikuti kolom tanda tangan: '{p['lama']}' tertulis "
+                f"di bawah perusahaan pihak lain, sedangkan di bawah {p['perusahaan']} tertulis "
+                f"'{p['baru']}'. Cek blok tanda tangan."
+            )
+        else:
+            pesan = (
+                f"Wakil {p['pihak']} diisi dari kolom tanda tangan di bawah {p['perusahaan']}: "
+                f"'{p['baru']}'. LLM tidak mengisinya. Cek ejaan nama dengan PDF."
+            )
+        c.add(
+            "penandatangan_per_kolom",
+            Severity.WARNING,
+            [f"{p['pihak']}.Nama Representative", f"{p['pihak']}.Jabatan"],
+            pesan,
+            expected=p["baru"],
+            actual=p["lama"],
+        )
+    return c.report()
+
+
 _VALIDATORS: dict[str, Callable[[dict[str, Any]], ValidationReport]] = {
     "contract": validate_contract,
     "sph": validate_sph,

@@ -22,6 +22,7 @@ from app.document_ir.adapter import content_hash, from_parsed_response
 from app.document_ir.models import DocumentIR
 from app.evidence.locator import build_field_evidence, verify_identifiers_second_ocr
 from app.extractors.prompts import PROMPT_VERSION
+from app.extractors.reconcile import pasangkan_penandatangan
 from app.ingestion.profiler import DocumentProfile, profile_document, strip_hidden_text
 from app.logger import logger
 from app.schemas.bast import BASTExtractionSchema
@@ -36,6 +37,7 @@ from app.validation.rules import (
     check_amounts_grounded,
     note_duplicate_pages,
     note_hidden_text,
+    note_penandatangan,
     note_second_ocr,
     validate_extraction,
 )
@@ -371,9 +373,13 @@ class OpenADEEngine:
         timings["extract_s"] = round(time.time() - t, 2)
         ir.document_type = detected_type
         data = extracted.model_dump(by_alias=True)
+        # Wakil pihak dicocokkan dengan kolom tanda tangan (bbox), sesudah LLM dan sebelum
+        # validasi, supaya status bukti dan aturan wakil pihak memakai nilai yang sudah dicek.
+        penandatangan = pasangkan_penandatangan(data, ir) if detected_type == "contract" else []
 
         t = time.time()
         validation = validate_extraction(detected_type, data)
+        validation = note_penandatangan(validation, penandatangan)
         evidence = build_field_evidence(data, ir, validation, min_score=config.GROUNDING_MIN_SCORE)
         evidence, ocr_berbeda, ocr_kedua = verify_identifiers_second_ocr(
             evidence, pdf_path, profile.ocr_pages if profile else []

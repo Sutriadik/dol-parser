@@ -13,7 +13,6 @@ Perubahan penting:
 """
 
 import json
-import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -53,6 +52,7 @@ from app.extractors.reconcile import (  # noqa: F401
     drop_unwritten_sph_totals,
     fill_terbilang_from_text,
     find_terbilang_in_text,
+    perusahaan_sama,
     prefer_confirmed_amount,
     reconcile_bast_items,
     reconcile_items,
@@ -83,19 +83,6 @@ DETERMINISTIC_FIELDS = (
 # kosong saat pass-1 akan memicu retry yang tidak perlu.
 NULL_COUNT_SKIP = set(DETERMINISTIC_FIELDS)
 CHARS_PER_TOKEN = 3.0  # estimasi kasar untuk teks Indonesia pada tokenizer Qwen
-
-
-def _perusahaan_sama(a: str | None, b: str | None) -> bool:
-    """Nama perusahaan dianggap sama bila salah satunya kosong atau separuh katanya beririsan
-    (abaikan PT/CV dan tanda baca, karena OCR dan LLM menulisnya berbeda-beda)."""
-
-    def kata(s: str | None) -> set[str]:
-        return set(re.findall(r"[a-z0-9]{3,}", (s or "").lower())) - {"tbk", "persero"}
-
-    ka, kb = kata(a), kata(b)
-    if not ka or not kb:
-        return True
-    return len(ka & kb) / min(len(ka), len(kb)) >= 0.5
 
 
 class OllamaExtractor:
@@ -774,7 +761,7 @@ class OllamaExtractor:
             # Surat perintah ditujukan kepada pelaksana, yaitu Pihak Kedua. Dipakai hanya bila
             # perusahaannya sama dengan Pihak Kedua hasil LLM; tanpa itu peran tidak terbukti.
             surat = self.context_analyzer.parse_alamat_surat(markdown_text)
-            if p2.nama_perusahaan and _perusahaan_sama(
+            if p2.nama_perusahaan and perusahaan_sama(
                 p2.nama_perusahaan, surat.get("nama_perusahaan")
             ):
                 p2_hint = surat
@@ -783,7 +770,7 @@ class OllamaExtractor:
         # dilewati bila salah satu pihak tanpa petunjuk, padahal petunjuk yang ada cocok dengan
         # golden pada 7 dari 7 field yang diuji. Nilai dari LLM tidak pernah ditimpa di sini.
         for party, hint in ((p1, p1_hint), (p2, p2_hint)):
-            if not _perusahaan_sama(party.nama_perusahaan, hint.get("nama_perusahaan")):
+            if not perusahaan_sama(party.nama_perusahaan, hint.get("nama_perusahaan")):
                 continue  # petunjuk milik perusahaan lain: jangan dipasang ke pihak ini
             for attr in ("nama_representative", "jabatan", "alamat"):
                 if is_placeholder(getattr(party, attr)) and hint.get(attr):
