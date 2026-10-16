@@ -439,6 +439,40 @@ def _kepala_kolom(teks: str, perusahaan: dict[str, str | None]) -> str | None:
     return cocok[0] if lebih <= 4 else None
 
 
+def _kepala_tergabung(ir: Any, perusahaan: dict[str, str | None]) -> bool:
+    """
+    Ada blok yang isinya nama kedua perusahaan sekaligus: kepala dua kolom tanda tangan yang
+    dibaca OCR sebagai satu blok. Kolom siapa-di-bawah-siapa tidak bisa ditentukan, jadi wakil
+    yang diisi LLM tidak bisa dicek perannya.
+    """
+    if not all(perusahaan.values()):
+        return False
+    for page in ir.pages:
+        for b in page.blocks:
+            if not b.bbox or len(b.text) > 200:
+                continue
+            if not all(perusahaan_sama(b.text, n) for n in perusahaan.values()):
+                continue
+            sisa = _kata_perusahaan(b.text)
+            for n in perusahaan.values():
+                sisa -= _kata_perusahaan(n)
+            if len(sisa) <= 4:  # kalimat pembuka yang menyebut keduanya bukan kepala kolom
+                return True
+    return False
+
+
+def _peran_tertulis(ir: Any, nama: str, milik: str | None, lain: str | None) -> bool:
+    """Nama wakil tertulis satu blok dengan perusahaannya sendiri, tanpa perusahaan pihak lain
+    ("PT X, dalam hal ini diwakili oleh Y"). Perannya tertulis, tidak perlu dari tata letak."""
+    cari = re.sub(r"\s+", " ", nama).strip().lower()
+    for page in ir.pages:
+        for b in page.blocks:
+            teks = re.sub(r"\s+", " ", b.text).lower()
+            if cari in teks and perusahaan_sama(teks, milik) and not perusahaan_sama(teks, lain):
+                return True
+    return False
+
+
 def _kolom_ttd(ir: Any, perusahaan: dict[str, str | None]) -> dict[str, list[tuple]]:
     """(nama, jabatan) penandatangan per pihak, dari setiap pasangan kepala kolom yang sejajar."""
     kolom: dict[str, list[tuple]] = {p: [] for p in perusahaan}
@@ -585,8 +619,9 @@ def pasangkan_penandatangan(data: dict[str, Any], ir: Any) -> list[dict[str, Any
     """
     Cocokkan wakil & jabatan kedua pihak dengan kolom tanda tangan; ubah `data` di tempat.
 
-    Kembali: daftar perubahan {pihak, jenis: "diganti"|"diisi", lama, baru, perusahaan} untuk
-    catatan PM. Hanya berjalan bila kedua kolom ditemukan.
+    Kembali: daftar perubahan {pihak, jenis, lama, baru, perusahaan} untuk catatan PM. Jenis
+    "diganti"/"diisi" bila kedua kolom ditemukan; "tak_pasti" bila kepala kolom tergabung
+    sehingga wakil isian LLM tidak bisa dicek (nilainya tidak diubah).
     """
     pihak = {p: data.get(p) or {} for p in ("Pihak Pertama", "Pihak Kedua")}
     perusahaan = {p: d.get("Nama Perusahaan") for p, d in pihak.items()}
@@ -610,6 +645,28 @@ def pasangkan_penandatangan(data: dict[str, Any], ir: Any) -> list[dict[str, Any
                         "perusahaan": perusahaan[p],
                     }
                 )
+        # Kasus nyata (nota pesanan, scan): kepala dua kolom terbaca satu blok, lalu LLM
+        # memasang penandatangan Pihak Pertama sebagai wakil Pihak Kedua, dan grounding
+        # memberinya bukti_kuat karena namanya memang ada di dokumen.
+        if _kepala_tergabung(ir, perusahaan):
+            diisi = {c["pihak"] for c in perubahan}
+            lain = {"Pihak Pertama": "Pihak Kedua", "Pihak Kedua": "Pihak Pertama"}
+            for p, d in pihak.items():
+                rep = d.get("Nama Representative")
+                if (
+                    rep
+                    and p not in diisi
+                    and not _peran_tertulis(ir, rep, perusahaan[p], perusahaan[lain[p]])
+                ):
+                    perubahan.append(
+                        {
+                            "pihak": p,
+                            "jenis": "tak_pasti",
+                            "lama": rep,
+                            "baru": rep,
+                            "perusahaan": perusahaan[p],
+                        }
+                    )
         return perubahan
     lain = {"Pihak Pertama": "Pihak Kedua", "Pihak Kedua": "Pihak Pertama"}
     for p, d in pihak.items():

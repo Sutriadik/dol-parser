@@ -261,3 +261,64 @@ def test_penandatangan_tunggal_tidak_mengganti_nilai_llm():
 
     assert pasangkan_penandatangan(data, ir) == []
     assert data["Pihak Pertama"]["Nama Representative"] == "Siapa Saja"
+
+
+def test_wakil_dari_llm_ditandai_bila_kepala_kolom_tergabung():
+    """Kasus nyata (nota pesanan, scan): nama kedua perusahaan terbaca satu blok, lalu LLM
+    memasang penandatangan Pihak Pertama sebagai wakil Pihak Kedua dengan status bukti_kuat.
+    Peran yang tidak bisa dipastikan dari tata letak harus dicek PM; nilainya tidak diubah."""
+    data = _data(rep2="ANDI WIJAYA", jab2="DIREKTUR")
+    ir = _ir(
+        (
+            2,
+            [
+                _blok(0, f"Menyetujui,\n{PK}\n{PP}", 0.12, 0.61, 0.88, 0.67),
+                _blok(1, "ANDI WIJAYA", 0.12, 0.76, 0.27, 0.77),
+                _blok(2, "BUDI SANTOSO", 0.67, 0.76, 0.84, 0.77),
+            ],
+        )
+    )
+
+    perubahan = pasangkan_penandatangan(data, ir)
+
+    assert data["Pihak Kedua"]["Nama Representative"] == "ANDI WIJAYA"
+    assert [(p["pihak"], p["jenis"]) for p in perubahan] == [("Pihak Kedua", "tak_pasti")]
+    laporan = note_penandatangan(ValidationReport(status="pass", rule_version="uji"), perubahan)
+    for field in ("Pihak Kedua.Nama Representative", "Pihak Kedua.Jabatan"):
+        assert "tidak bisa dipastikan" in laporan.issues_for(field)[0].message
+
+
+def test_kalimat_pembuka_yang_menyebut_kedua_perusahaan_bukan_kepala_kolom():
+    data = _data(rep1="ANDI WIJAYA", jab1="DIREKTUR")
+    kalimat = (
+        f"Perjanjian ini dibuat oleh dan antara {PP} yang dalam hal ini diwakili oleh "
+        f"ANDI WIJAYA selaku Direktur, dengan {PK}."
+    )
+    ir = _ir((1, [_blok(0, kalimat, 0.10, 0.20, 0.90, 0.26, page=1)]))
+
+    assert pasangkan_penandatangan(data, ir) == []
+
+
+def test_wakil_yang_perannya_tertulis_di_pembukaan_tidak_ditandai_walau_kepala_tergabung():
+    data = _data(rep1="ANDI WIJAYA", jab1="DIREKTUR", rep2="BUDI SANTOSO", jab2="DIREKTUR")
+    ir = _ir(
+        (
+            1,
+            [
+                _blok(
+                    0,
+                    f"{PP}, dalam hal ini diwakili oleh ANDI WIJAYA selaku Direktur.",
+                    0.10,
+                    0.20,
+                    0.90,
+                    0.24,
+                    page=1,
+                )
+            ],
+        ),
+        (2, [_blok(0, f"{PK}\n{PP}", 0.12, 0.61, 0.88, 0.67)]),
+    )
+
+    perubahan = pasangkan_penandatangan(data, ir)
+
+    assert [(p["pihak"], p["jenis"]) for p in perubahan] == [("Pihak Kedua", "tak_pasti")]
