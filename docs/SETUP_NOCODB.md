@@ -80,6 +80,58 @@ make cek-nocodb        # URL, token, setiap tableId
 make cek-skema         # setiap tabel NocoDB identik dengan dol-schema, kolom per kolom
 ```
 
+## Langkah 3b: Tampilan untuk PM
+
+```bash
+make buat-tampilan                 # atau: make buat-tampilan JUDUL="DOL Schema uji"
+```
+
+Menyiapkan base itu untuk PM. Aman diulang: kolom dan tampilan yang judulnya sudah ada
+dilewati, jadi penyesuaian yang dibuat PM di NocoDB tidak tertimpa. Rumus kolom hitungan yang
+diperbaiki di skrip ikut diperbarui. Butuh base 2026.10.7 ke atas (relasi Keputusan PM).
+
+Alur PM: buka **Beranda PM**, pilih dokumen, periksa **Antrean PM** dan grid verifikasi
+per baris, lalu tekan **Putuskan** atau **Cek Baris**. Tombol itu membuka form
+*Catat Keputusan* yang sudah terisi Nama Field, nilai sistem, dokumen, baris yang
+diputuskan, dan waktu. PM tinggal memilih `benar` / `dikoreksi` / `ditolak` dan menulis
+namanya. Field yang sudah diputuskan hilang dari Antrean PM.
+
+| Tabel | Tampilan | Isinya |
+|---|---|---|
+| Dokumen | **Beranda PM** | satu baris per dokumen: Status Pemeriksaan, Progres (%), jumlah field Perlu Dicek dan Sudah Diputuskan |
+| Hasil Ekstraksi | **Antrean PM** | status `bertentangan`, `tidak_ada_di_dokumen`, `perlu_dicek` yang belum diputuskan, dikelompokkan per Dokumen lalu Bagian, paling berisiko di atas. Rincian item tidak diulang di sini |
+| Hasil Ekstraksi | **Harga Wajib Dicek** | subtotal, PPN, total, terbilang, apa pun statusnya (harga selalu diverifikasi manusia) |
+| Hasil Ekstraksi | **Semua Field per Dokumen** | semua field, dikelompokkan per Dokumen dan Bagian |
+| Dokumen | **Dokumen Masuk** | terbaru di atas, dengan Mutu Pembacaan dan Catatan Validasi; Isi Dokumen disembunyikan |
+| Rincian SPH | **Verifikasi SPH per Baris** | grid verifikasi (briefing Bulan 3): satu baris penawaran per baris grid, Cek Hitung, Keputusan, tombol Cek Baris |
+| Rincian Kontrak | **Verifikasi Kontrak per Baris** | sama, untuk BoQ kontrak |
+| Keputusan PM | **Riwayat Keputusan** | keputusan terbaru di atas |
+| Keputusan PM | **Catat Keputusan** (form) | dibagikan lewat tautan supaya bisa diisi dari URL |
+
+Kolom hitungan yang ditambahkan (tidak menyimpan data, `--compare-schema` melewatinya):
+Field (nama ramah, mis. "Baris 2 · Harga Satuan"), Bagian, Berisiko, Urutan Risiko,
+Keputusan, Jumlah Keputusan, Putuskan di Hasil Ekstraksi; Jumlah Field, Sudah Diputuskan,
+Perlu Dicek, Progres, Status Pemeriksaan di Dokumen; Dokumen Asal, Cek Hitung, Keputusan,
+Jumlah Keputusan, Cek Baris di Rincian SPH dan Rincian Kontrak. Status Bukti dan Keputusan
+diberi warna sesuai `docs/proyek/08_UI_UX.md` §2. Tampilan PM dikunci supaya susunannya tidak
+berubah tanpa sengaja; datanya tetap bisa diisi.
+
+Yang perlu diketahui:
+
+- **Tautan form bersifat publik.** Siapa pun yang bisa membuka alamat NocoDB dan memegang
+  tautannya bisa mengisi form. Di laptop (localhost) aman; sebelum NocoDB bisa dijangkau dari
+  jaringan kantor, beri kata sandi pada tautan form (Share > Password).
+- **Alamat di tombol** memakai `NOCODB_URL`. Bila NocoDB dibuka PM lewat alamat lain (mis.
+  di server), isi `NOCODB_PUBLIC_URL` sebelum menjalankan perintah ini.
+- **Batas rumus NocoDB di SQLite** (basis data bawaannya): tidak ada FIND, SUBSTITUTE,
+  VALUE, INT, maupun regex; perbandingan memakai `==`; URLENCODE atas teks gabungan yang
+  panjang membuat tabel tidak bisa dibaca ("parser stack overflow"). Tes di
+  `tests/test_companion_push.py` menjaga ketiganya.
+
+Daftarnya ada di `TAMPILAN_PM`, `KOLOM_TAMPILAN`, dan `FORM_KEPUTUSAN`
+(`scripts/nocodb_setup.py`) dan memakai nama teknis dol-schema. Untuk menambah tampilan,
+tambah satu entri di sana.
+
 ## Langkah 4: Kirim satu dokumen
 
 ```bash

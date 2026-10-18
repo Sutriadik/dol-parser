@@ -19,7 +19,8 @@ DOC_TYPE ?= auto
 LOAD_ENV := set -a; [ ! -f .env ] || . ./.env; set +a;
 
 .DEFAULT_GOAL := bantuan
-.PHONY: bantuan pasang pasang-dev test test-cepat eval serve dok buat-base cek-nocodb cek-skema \
+.PHONY: bantuan pasang pasang-dev test test-cepat eval serve dok buat-base buat-tampilan \
+	cek-nocodb cek-skema \
 	cek-ocr cek-rahasia rapi cek-gaya uji-jobs bersih
 
 bantuan:  ## Tampilkan daftar perintah ini
@@ -58,6 +59,9 @@ eval:  ## Ukur akurasi terhadap eval/golden/
 
 buat-base:  ## Buat base NocoDB (relasi sebagai Link) untuk dol-schema terpasang [JUDUL=...]
 	@$(LOAD_ENV) $(PY) scripts/nocodb_setup.py --create-base $(if $(JUDUL),"$(JUDUL)")
+
+buat-tampilan:  ## Buat tampilan siap pakai untuk PM di base NocoDB [JUDUL=...]
+	@$(LOAD_ENV) $(PY) scripts/nocodb_setup.py --create-views $(if $(JUDUL),"$(JUDUL)")
 
 cek-nocodb:  ## Periksa URL, token, dan tableId NocoDB satu per satu
 	@$(LOAD_ENV) $(PY) scripts/nocodb_setup.py --check
