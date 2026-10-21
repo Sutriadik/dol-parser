@@ -19,7 +19,7 @@ from app.extractors.deterministic.numbers import (
 )
 from app.schemas.evidence import Severity, ValidationIssue, ValidationReport
 
-RULE_VERSION = "rules-2026.10.2"
+RULE_VERSION = "rules-2026.10.3"
 # Toleransi absolut untuk selisih pembulatan PPN/harga satuan. Toleransi relatif (0.5%) sempat
 # dicoba tapi meloloskan terbilang yang salah ~Rp824 ribu pada nilai kontrak Rp174 juta.
 ROUNDING_TOLERANCE = 1000.0
@@ -524,7 +524,13 @@ def note_penandatangan(
     c.issues, c.checked = list(report.issues), list(report.checked_rules)
     c.rule("penandatangan_per_kolom")
     for p in perubahan:
-        if p["jenis"] == "diganti":
+        if p["jenis"] == "tak_pasti":
+            pesan = (
+                f"Peran penandatangan tidak bisa dipastikan: nama kedua perusahaan di blok tanda "
+                f"tangan terbaca sebagai satu blok, jadi tidak jelas apakah '{p['lama']}' "
+                f"menandatangani untuk {p['perusahaan']}. Cek blok tanda tangan."
+            )
+        elif p["jenis"] == "diganti":
             pesan = (
                 f"Wakil {p['pihak']} diganti mengikuti kolom tanda tangan: '{p['lama']}' tertulis "
                 f"di bawah perusahaan pihak lain, sedangkan di bawah {p['perusahaan']} tertulis "
