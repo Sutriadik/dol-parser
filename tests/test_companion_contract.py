@@ -342,6 +342,7 @@ NASIB_KONTRAK = {
     "Total PPN": "kolom",
     "Total Harga Pekerjaan": "kolom",
     "Jumlah Terbilang": "hasil_ekstraksi",
+    "Keterangan PPN": "hasil_ekstraksi",  # belum ada kolom; usulan Status PPN
     "Garansi": "hasil_ekstraksi",
     "Klausul Jaminan.Nomor Pasal": "hasil_ekstraksi",
     "Klausul Jaminan.Uraian Jaminan": "hasil_ekstraksi",

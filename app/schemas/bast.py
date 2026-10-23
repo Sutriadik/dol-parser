@@ -16,7 +16,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.extractors.deterministic.identifiers import normalize_document_number
+from app.extractors.deterministic.identifiers import (
+    bersihkan_nama_pekerjaan,
+    normalize_document_number,
+)
 from app.schemas.contract import PihakDetail
 
 
@@ -139,3 +142,9 @@ class BASTExtractionSchema(BaseModel):
     def _rapikan_nomor_dokumen(cls, v):
         """Buang spasi sisipan OCR di dalam nomor dokumen (lihat deterministic/identifiers.py)."""
         return normalize_document_number(v)
+
+    @field_validator("nama_pekerjaan", mode="after")
+    @classmethod
+    def _rapikan_nama_pekerjaan(cls, v):
+        """Judul "Berita Acara Serah Terima <nama pekerjaan>" -> nama pekerjaannya saja."""
+        return bersihkan_nama_pekerjaan(v)

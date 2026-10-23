@@ -9,7 +9,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.extractors.deterministic.identifiers import normalize_document_number
+from app.extractors.deterministic.identifiers import (
+    bersihkan_nama_pekerjaan,
+    normalize_document_number,
+)
 
 
 class SPHVendorInfo(BaseModel):
@@ -109,6 +112,19 @@ class SPHExtractionSchema(BaseModel):
     perihal: str | None = Field(
         None, alias="Perihal / Nama Pekerjaan", description="Perihal surat penawaran harga"
     )
+    # Diisi pembaca kalimat pembuka ("Menunjuk/Merujuk Surat ... Nomor ... tanggal ..."), bukan
+    # oleh LLM: dibuang dari skema pass-1 (DETERMINISTIC_FIELDS). Nomor inilah yang menautkan
+    # SPH ke SPPH atau undangan yang dibalasnya (WORKSHOP_SKEMA 5b).
+    nomor_surat_permintaan: str | None = Field(
+        None,
+        alias="Nomor Surat Permintaan Dirujuk",
+        description="Nomor surat permintaan penawaran (SPPH/undangan) yang dibalas SPH ini",
+    )
+    tanggal_surat_permintaan: str | None = Field(
+        None,
+        alias="Tanggal Surat Permintaan Dirujuk",
+        description="Tanggal surat permintaan penawaran yang dibalas SPH ini",
+    )
 
     masa_berlaku: str | None = Field(
         None,
@@ -149,6 +165,12 @@ class SPHExtractionSchema(BaseModel):
     grand_total: float = Field(
         ..., alias="Grand Total", description="Total akhir penawaran termasuk pajak"
     )
+    # Diisi deterministik (reconcile.lengkapi_keterangan_ppn), bukan oleh LLM.
+    keterangan_ppn: str | None = Field(
+        None,
+        alias="Keterangan PPN",
+        description="Kalimat dokumen yang menyatakan harga sudah/belum termasuk PPN",
+    )
     jumlah_terbilang: str | None = Field(
         None,
         alias="Jumlah Terbilang",
@@ -178,3 +200,10 @@ class SPHExtractionSchema(BaseModel):
     def _rapikan_nomor_dokumen(cls, v):
         """Buang spasi sisipan OCR di dalam nomor dokumen (lihat deterministic/identifiers.py)."""
         return normalize_document_number(v)
+
+    @field_validator("perihal", mode="after")
+    @classmethod
+    def _rapikan_nama_pekerjaan(cls, v):
+        """Perihal "Penawaran Harga <nama pekerjaan>" disimpan sebagai nama pekerjaannya saja,
+        supaya sama dengan Nama Pekerjaan di kontrak proyek yang sama."""
+        return bersihkan_nama_pekerjaan(v)

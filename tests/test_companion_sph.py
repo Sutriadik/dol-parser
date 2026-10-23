@@ -141,6 +141,10 @@ NASIB_SPH = {
     "Nomor SPH": "kolom",
     "Tanggal SPH": "kolom",
     "Perihal / Nama Pekerjaan": "kolom",
+    # Belum punya kolom di SPH Vendor (usulan WORKSHOP_SKEMA 5b); n8n bisa membacanya dari
+    # Hasil Ekstraksi untuk menautkan SPH ke SPPH-nya.
+    "Nomor Surat Permintaan Dirujuk": "hasil_ekstraksi",
+    "Tanggal Surat Permintaan Dirujuk": "hasil_ekstraksi",
     "Masa Berlaku Penawaran": "kolom",
     "Berlaku Sampai Tanggal": "hasil_ekstraksi",
     "Jangka Waktu Pengiriman": "hasil_ekstraksi",
@@ -164,6 +168,7 @@ NASIB_SPH = {
     "Nilai PPN": "kolom",
     "Grand Total": "kolom",
     "Jumlah Terbilang": "hasil_ekstraksi",
+    "Keterangan PPN": "hasil_ekstraksi",  # belum ada kolom; usulan Status PPN
     "Mekanisme Skema Pembayaran": "kolom",
     "Garansi / SLA": "hasil_ekstraksi",
     "Catatan Khusus": "hasil_ekstraksi",

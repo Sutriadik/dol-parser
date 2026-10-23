@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.extractors.deterministic.dates import find_dates
+from app.extractors.deterministic.identifiers import normalize_document_number
 from app.extractors.deterministic.numbers import normalize_id_money_in_text
 from app.logger import logger
 
@@ -92,6 +93,16 @@ _ADDRESS_KEYWORDS = [
 # Kop surat: "Kepada Yth," / "Kepada Yth." / "Kepada Yang Terhormat" lalu isi satu baris.
 _KEPADA_YTH = re.compile(r"Kepada\s+Y(?:th|ang\s+Terhormat)\.?\s*[,:]?\s*(?P<isi>[^\n]+)", re.I)
 _BADAN_USAHA = re.compile(r"\b(?:PT|CV|Perum|Koperasi|Yayasan|UD|PD)\.?\s+[A-Z]")
+# Nomor boleh memuat spasi sebelum/sesudah "/" (OCR: "027/04/PL/ABC /II.03/VI/2026").
+# Perihal berhenti di akhir kalimat (". Kami sampaikan"), titik koma, atau akhir baris.
+_RUJUKAN_PERMINTAAN = re.compile(
+    r"\b(?:menunjuk|merujuk|menindaklanjuti|sehubungan\s+dengan|memperhatikan)\b[^\n.]{0,80}?"
+    r"\b(?:surat|undangan)\b[^\n]{0,80}?\b(?:nomor|no)\b\.?\s*:?\s*"
+    r"(?P<nomor>[^\s,;]+(?:\s*/\s*[^\s,;]+)*)\s*,?\s*"
+    r"tanggal\s+(?P<tanggal>\d{1,2}\s+[A-Za-z]+\s+\d{4})"
+    r"(?:\s*,?\s*(?:perihal|hal|tentang)\s*:?\s*(?P<perihal>[^\n;]+?)(?=\.\s+\w|\.?\s*$|;))?",
+    re.I | re.M,
+)
 _BANK_STOP = r"(?!(?i:cabang|kcp|kc|unit|no|nomor|rekening|dengan|sebesar|atas)\b|a\.n)"
 
 # "Pihak Kesatu" adalah sinonim resmi "Pihak Pertama" yang umum dipakai di dokumen
@@ -443,6 +454,31 @@ class ContextAnalyzer:
         info["nama_perusahaan"] = (sisa[: jalan.start()] if jalan else sisa).strip(" ,")
         if jalan:
             info["alamat"] = sisa[jalan.start() :].strip(" ,")
+        return info
+
+    @staticmethod
+    def parse_rujukan_permintaan(markdown_text: str) -> dict[str, str]:
+        """
+        Surat permintaan yang dibalas sebuah SPH, dari kalimat pembukanya:
+
+            "Menunjuk Surat Nomor: X tanggal 31 Juli 2026 perihal Permintaan Penawaran ..."
+            "Merujuk Surat Permintaan Penawaran Harga Nomor: X tanggal ... perihal ..."
+            "Sehubungan dengan undangan pengadaan langsung nomor : X tanggal ..., dengan ..."
+
+        Kata pembuka dibatasi (menunjuk, merujuk, ...) dan wajib diikuti "surat"/"undangan":
+        "berdasarkan Akta Nomor ... tanggal ..." di preambule bukan surat permintaan.
+        Mengembalikan {nomor, tanggal[, perihal]} atau {} bila kalimatnya tidak ada.
+        """
+        text = html.unescape(markdown_text).replace("**", "")
+        m = _RUJUKAN_PERMINTAAN.search(text)
+        if not m:
+            return {}
+        info = {
+            "nomor": normalize_document_number(m.group("nomor").strip(" .")),
+            "tanggal": m.group("tanggal"),
+        }
+        if m.group("perihal"):
+            info["perihal"] = m.group("perihal").strip(" .,")
         return info
 
     @staticmethod

@@ -2,7 +2,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.extractors.deterministic.identifiers import normalize_document_number
+from app.extractors.deterministic.identifiers import (
+    bersihkan_nama_pekerjaan,
+    normalize_document_number,
+)
 
 
 class PihakDetail(BaseModel):
@@ -266,6 +269,13 @@ class ContractExtractionSchema(BaseModel):
     jumlah_terbilang: str | None = Field(
         None, alias="Jumlah Terbilang", description="Nominal rupiah yang ditulis dalam kata-kata"
     )
+    # Diisi deterministik (reconcile.lengkapi_keterangan_ppn), bukan oleh LLM. BAST mencetak
+    # status ini di samping nilai pengadaan ("Rp ... (Sebelum PPN)").
+    keterangan_ppn: str | None = Field(
+        None,
+        alias="Keterangan PPN",
+        description="Kalimat dokumen yang menyatakan harga sudah/belum termasuk PPN",
+    )
 
     garansi: str | None = Field(None, alias="Garansi", description="Klausul garansi atau SLA")
     klausul_jaminan: KlausulJaminanDetail | None = Field(
@@ -312,3 +322,10 @@ class ContractExtractionSchema(BaseModel):
     @classmethod
     def _rapikan_nomor_dokumen(cls, v):
         return normalize_document_number(v)
+
+    # Alasan yang sama dengan nomor dokumen: berlaku untuk setiap pemanggil. LLM sering ikut
+    # menyalin judul surat ("Berita Acara Klarifikasi dan Negosiasi ...", "Nota Pesanan ...").
+    @field_validator("nama_pekerjaan", mode="after")
+    @classmethod
+    def _rapikan_nama_pekerjaan(cls, v):
+        return bersihkan_nama_pekerjaan(v)

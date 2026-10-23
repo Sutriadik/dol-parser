@@ -14,8 +14,11 @@ Perbaikan terhadap grounding_linker lama:
 import re
 from difflib import SequenceMatcher
 
+from app.extractors.deterministic.dates import find_dates, parse_id_date
 from app.extractors.deterministic.numbers import numbers_in_text, parse_id_number
 
+_TANGGAL_ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
+_TERBILANG_KURUNG = re.compile(r"(\d)\s*\(\s*[A-Za-z][A-Za-z\s]*\)")
 _NUMERIC_QUERY = re.compile(r"^(?:Rp\.?\s*)?[\d][\d.,\s]*(?:,-)?$", re.IGNORECASE)
 
 
@@ -164,6 +167,15 @@ def calculate_match_confidence(
         0.80, min(1.0, ocr_confidence if ocr_confidence and ocr_confidence > 0 else 0.95)
     )
 
+    # Sebelum jalur angka: "2026-06-29" lolos is_numeric_query dan tidak pernah cocok dengan
+    # dokumen yang menulis "29 Juni 2026" (kasus nyata: Tanggal Negosiasi benar tapi
+    # UNSUPPORTED). Cocok hanya bila nilai tanggalnya sama persis.
+    if _TANGGAL_ISO.fullmatch(query.strip()):
+        dicari = parse_id_date(query)
+        if dicari and dicari in find_dates(item_text):
+            return round(0.95 * ocr_factor, 3), "date_match"
+        return 0.0, None
+
     if is_numeric_query(query):
         return _number_match(query, item_text, ocr_factor)
 
@@ -173,6 +185,11 @@ def calculate_match_confidence(
         skor, jenis = _identifier_match(query, item_text, ocr_factor)
         if jenis:
             return skor, jenis
+
+    # Dokumen menulis "30 (tiga puluh) hari kalender", LLM menyalinnya "30 hari kalender".
+    # Terbilang dalam kurung hanya diabaikan saat mencocokkan; nilai yang disimpan tetap.
+    if "(" not in query:
+        item_text = _TERBILANG_KURUNG.sub(r"\1", item_text)
 
     q_c, it_c = canon(query), canon(item_text)
     if not q_c or not it_c:

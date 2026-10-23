@@ -22,7 +22,10 @@ import ollama
 from pydantic import BaseModel, ValidationError
 
 from app.config import config
-from app.extractors.deterministic.identifiers import fix_contract_number_roles
+from app.extractors.deterministic.identifiers import (
+    bersihkan_nama_pekerjaan,
+    fix_contract_number_roles,
+)
 from app.extractors.llm_output import (  # noqa: F401 -- konstanta diekspor ulang untuk tes
     LONG_TEXT_FIELDS,
     LONG_TEXT_MAX_CHARS,
@@ -48,13 +51,16 @@ from app.extractors.prompts import (
 )
 from app.extractors.reconcile import (  # noqa: F401
     SUMMARY_ROW,
+    buang_salinan_contoh,
     clean_and_number_items,
     drop_unwritten_sph_totals,
     fill_terbilang_from_text,
     find_terbilang_in_text,
     koreksi_subtotal_salah_kolom,
+    lengkapi_keterangan_ppn,
     perusahaan_sama,
     prefer_confirmed_amount,
+    rapikan_dokumen_pendukung,
     reconcile_bast_items,
     reconcile_items,
     sanitize_sph_totals,
@@ -79,6 +85,11 @@ DETERMINISTIC_FIELDS = (
     "Daftar Penawaran Harga",
     "Daftar Barang/Pekerjaan Diserahkan",
     "Daftar Tabel Terstruktur",
+    # Dari kalimat pembuka SPH (_lengkapi_rujukan_permintaan). Dibuang juga supaya masukan
+    # pass-1 tetap sama persis dengan sebelum field ini ada.
+    "Nomor Surat Permintaan Dirujuk",
+    "Tanggal Surat Permintaan Dirujuk",
+    "Keterangan PPN",  # reconcile.lengkapi_keterangan_ppn
 )
 # Field deterministik tidak boleh ikut menghitung rasio null. Kalau ikut, `items` yang masih
 # kosong saat pass-1 akan memicu retry yang tidak perlu.
@@ -680,6 +691,11 @@ class OllamaExtractor:
             targeted_min_chars=3000,
         )
 
+        buang_salinan_contoh(
+            extracted,
+            markdown_text,
+            CONTRACT_EXTRACTION_SYSTEM_PROMPT + CONTRACT_RETRY_PROMPT_TEMPLATE,
+        )
         kelompok = extract_item_groups_from_markdown_tables(markdown_text, doc_type="contract")
         extracted.items = reconcile_items(
             extracted.items,
@@ -730,6 +746,8 @@ class OllamaExtractor:
         fill_terbilang_from_text(
             extracted, markdown_text, (extracted.total_harga_pekerjaan, extracted.sub_total)
         )
+        lengkapi_keterangan_ppn(extracted, markdown_text, "persentase_ppn")
+        rapikan_dokumen_pendukung(extracted)
 
         self._reconcile_parties(extracted, markdown_text, penerima_surat_pihak_kedua=True)
 
@@ -816,6 +834,9 @@ class OllamaExtractor:
             self._extract_targeted_sph_clauses,
             targeted_min_chars=1000,
         )
+        buang_salinan_contoh(
+            extracted, markdown_text, SPH_EXTRACTION_SYSTEM_PROMPT + SPH_RETRY_PROMPT_TEMPLATE
+        )
         kelompok = extract_item_groups_from_markdown_tables(markdown_text, doc_type="sph")
         extracted.items = reconcile_items(
             extracted.items,
@@ -850,10 +871,56 @@ class OllamaExtractor:
         fill_terbilang_from_text(
             extracted, markdown_text, (extracted.grand_total, extracted.subtotal)
         )
+        lengkapi_keterangan_ppn(extracted, markdown_text, "persentase_ppn")
+        self._lengkapi_tujuan_surat(extracted, markdown_text)
+
+        self._lengkapi_rujukan_permintaan(extracted, markdown_text)
 
         if not extracted.daftar_tabel_terstruktur:
             extracted.daftar_tabel_terstruktur = extract_tables_from_markdown(markdown_text) or None
         return extracted
+
+    def _lengkapi_tujuan_surat(self, extracted: SPHExtractionSchema, markdown_text: str) -> None:
+        """
+        Tujuan Surat yang dikosongkan LLM diisi dari baris "Kepada Yth" kop SPH.
+
+        Kasus nyata (SPH vendor scan): OCR menggabungkan "Perihal : ... Lampiran : ... Kepada
+        Yth : PT ..." dalam satu baris dan LLM mengosongkan Tujuan Surat. Di SPH, penerima
+        surat memang klien yang dituju; nilai LLM yang sudah terisi tidak ditimpa.
+        """
+        if not is_placeholder(extracted.tujuan_surat):
+            return
+        nama = self.context_analyzer.parse_alamat_surat(markdown_text).get("nama_perusahaan")
+        if nama:
+            extracted.tujuan_surat = nama
+
+    def _lengkapi_rujukan_permintaan(
+        self, extracted: SPHExtractionSchema, markdown_text: str
+    ) -> None:
+        """
+        Isi nomor & tanggal surat permintaan yang dibalas SPH, dan lengkapi perihal kop yang
+        terpotong dari perihal surat itu.
+
+        Kasus nyata: kop SPH terbaca "Perihal Kebutuhan Direktorat ..." karena baris pertamanya
+        hilang di OCR, padahal kalimat pembuka memuat perihal lengkap surat permintaannya.
+        Perihal hanya diganti bila kosong atau berupa potongan dari perihal rujukan; perihal
+        yang berbeda dibiarkan, karena memilih di antara dua nilai berbeda adalah tugas PM.
+        """
+        rujukan = self.context_analyzer.parse_rujukan_permintaan(markdown_text)
+        if not rujukan:
+            return
+        extracted.nomor_surat_permintaan = rujukan["nomor"]
+        extracted.tanggal_surat_permintaan = rujukan["tanggal"]
+
+        lengkap = bersihkan_nama_pekerjaan(rujukan.get("perihal"))
+        if not lengkap:
+            return
+        sekarang = " ".join((extracted.perihal or "").lower().split())
+        if not sekarang or (
+            sekarang in " ".join(lengkap.lower().split()) and len(lengkap) > len(sekarang)
+        ):
+            logger.info(f"Perihal SPH dilengkapi dari surat permintaan yang dirujuk: {lengkap}")
+            extracted.perihal = lengkap
 
     def extract_bast(self, markdown_text: str) -> BASTExtractionSchema:
         """
@@ -870,6 +937,9 @@ class OllamaExtractor:
             BAST_RETRY_PROMPT_TEMPLATE,
             self._extract_targeted_clauses,
             targeted_min_chars=800,
+        )
+        buang_salinan_contoh(
+            extracted, markdown_text, BAST_EXTRACTION_SYSTEM_PROMPT + BAST_RETRY_PROMPT_TEMPLATE
         )
         extracted.items = reconcile_bast_items(
             extracted.items,

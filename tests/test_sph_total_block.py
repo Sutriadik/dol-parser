@@ -230,3 +230,74 @@ def test_extract_sph_mengisi_terbilang_tanpa_panggilan_llm_tambahan(monkeypatch)
     hasil = ex.extract_sph(SPH_BERTERBILANG)
     assert hasil.jumlah_terbilang == "Empat Belas Juta Dua Ratus Lima Puluh Ribu Rupiah"
     assert ex.llm_calls == 0
+
+
+# Keterangan PPN: apakah harga yang tertulis sudah atau belum termasuk PPN. BAST mencetaknya
+# ("Nilai Pengadaan Rp ... (Sebelum PPN)"), tetapi dulu tidak terbaca: kasus nyata kontrak
+# "... belum termasuk Pajak Pertambahan Nilai (PPN)" tersimpan sebagai Total Harga Pekerjaan
+# tanpa tanda apa pun, dan SPH "Harga belum termasuk PPN 11%" keluar dengan Persentase PPN kosong.
+import pytest  # noqa: E402
+
+from app.extractors.reconcile import lengkapi_keterangan_ppn  # noqa: E402
+
+
+def _sph_kosong():
+    return SPHExtractionSchema.model_validate(
+        {
+            "Vendor": {"Nama Vendor": "PT Contoh"},
+            "Nomor SPH": "01/SPH/2026",
+            "Tanggal SPH": "1 Agustus 2026",
+            "Subtotal": 1,
+            "Grand Total": 1,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "teks,keterangan,persen",
+    [
+        ("Keterangan:\n- Harga belum termasuk PPN 11%;\n", "belum termasuk PPN 11%", "11%"),
+        (
+            "di mana harga tersebut belum termasuk Pajak Pertambahan Nilai (PPN) sesuai dengan "
+            "ketentuan, namun sudah termasuk pajak-pajak lainnya",
+            "belum termasuk Pajak Pertambahan Nilai (PPN)",
+            None,
+        ),
+        ("adalah sebesar Rp 1.000.000,- sudah termasuk PPN\n", "sudah termasuk PPN", None),
+        ("| Total (sebelum PPN) | Rp 1.000.000 |\n", "sebelum PPN", None),
+    ],
+)
+def test_keterangan_ppn_dibaca_seperti_tertulis(teks, keterangan, persen):
+    sph = _sph_kosong()
+    lengkapi_keterangan_ppn(sph, teks, "persentase_ppn")
+    assert sph.keterangan_ppn == keterangan
+    assert sph.persentase_ppn == persen
+
+
+@pytest.mark.parametrize(
+    "teks",
+    [
+        "Harga sudah termasuk pajak-pajak yang berlaku.\n",  # "pajak" umum, bukan PPN
+        "| Jumlah Sebelum PPN | 1.000 |\n| PPN 11% | 110 |\n| Jumlah Setelah PPN | 1.110 |\n",
+    ],
+)
+def test_keterangan_ppn_kosong_bila_tidak_disebut_atau_dua_duanya(teks):
+    sph = _sph_kosong()
+    lengkapi_keterangan_ppn(sph, teks, "persentase_ppn")
+    assert sph.keterangan_ppn is None
+
+
+def test_persentase_ppn_dari_llm_tidak_ditimpa():
+    sph = _sph_kosong()
+    sph.persentase_ppn = "12%"
+    lengkapi_keterangan_ppn(sph, "Harga belum termasuk PPN 11%", "persentase_ppn")
+    assert sph.persentase_ppn == "12%"
+
+
+def test_keterangan_ppn_terpasang_di_kontrak_dan_sph():
+    import inspect
+
+    sumber = inspect.getsource(OllamaExtractor.extract_contract) + inspect.getsource(
+        OllamaExtractor.extract_sph
+    )
+    assert sumber.count("lengkapi_keterangan_ppn(") == 2

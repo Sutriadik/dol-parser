@@ -247,3 +247,148 @@ def test_jumlah_item_tidak_cocok_menandai_setiap_harga_item():
         for i in laporan.issues
         if i.rule == "items_sum_matches_subtotal"
     )
+
+
+# Konsiderans kontrak: "Berita Acara Klarifikasi dan Negosiasi Harga <pekerjaan> tanggal 24
+# Januari 2025". Kasus nyata: Tanggal Negosiasi kosong karena nama pekerjaan memisahkan kata
+# "Negosiasi" dari "tanggal", sementara LLM menaruh tanggal yang sama di Nomor Dokumen.
+from app.extractors.reconcile import rapikan_dokumen_pendukung  # noqa: E402
+
+
+def _kontrak_dengan_pendukung(pendukung, **lain):
+    return ContractExtractionSchema.model_validate(
+        {
+            "Pihak Pertama": {"Nama Perusahaan": "PT Pemesan"},
+            "Pihak Kedua": {"Nama Perusahaan": "PT Contoh Jaya"},
+            "Dokumen Pendukung": pendukung,
+            **lain,
+        }
+    )
+
+
+BA_NEGO = {
+    "Nama Dokumen": "Berita Acara Klarifikasi dan Negosiasi Harga Pengadaan Contoh",
+    "Nomor Dokumen": "24 Januari 2025",
+    "Tanggal Dokumen": "24 Januari 2025",
+}
+
+
+def test_tanggal_negosiasi_diisi_dari_ba_negosiasi_di_dokumen_pendukung():
+    kontrak = _kontrak_dengan_pendukung([BA_NEGO])
+    rapikan_dokumen_pendukung(kontrak)
+    assert kontrak.tanggal_negosiasi == "24 Januari 2025"
+
+
+def test_tanggal_yang_masuk_nomor_dokumen_dikosongkan():
+    kontrak = _kontrak_dengan_pendukung([BA_NEGO])
+    rapikan_dokumen_pendukung(kontrak)
+    assert kontrak.dokumen_pendukung[0].nomor_dokumen is None
+    assert kontrak.dokumen_pendukung[0].tanggal_dokumen == "24 Januari 2025"
+
+
+def test_nomor_dokumen_asli_dan_tanggal_negosiasi_llm_dibiarkan():
+    pendukung = {**BA_NEGO, "Nomor Dokumen": "12/BA-NEGO/2025"}
+    kontrak = _kontrak_dengan_pendukung([pendukung], **{"Tanggal Negosiasi": "20 Januari 2025"})
+    rapikan_dokumen_pendukung(kontrak)
+    assert kontrak.dokumen_pendukung[0].nomor_dokumen == "12/BA-NEGO/2025"
+    assert kontrak.tanggal_negosiasi == "20 Januari 2025"
+
+
+def test_tujuan_surat_sph_kosong_diisi_dari_kepada_yth():
+    """Kasus nyata: OCR menggabungkan Perihal, Lampiran, dan Kepada Yth dalam satu baris."""
+    from app.schemas.sph import SPHExtractionSchema
+
+    sph = SPHExtractionSchema.model_validate(
+        {
+            "Vendor": {"Nama Vendor": "CV Vendor Contoh"},
+            "Nomor SPH": "01/SPH/2026",
+            "Tanggal SPH": "1 Agustus 2026",
+            "Subtotal": 1,
+            "Grand Total": 1,
+        }
+    )
+    teks = (
+        "Bandung, 05 Juni 2026 No : ABC/P/1 Perihal : Penawaran Lampiran : Spesifikasi "
+        "Kepada Yth : PT. Contoh Jaya Abadi\n\nDengan Surat ini kami bermaksud ...\n"
+    )
+    _ekstraktor_asli_tanpa_preambule()._lengkapi_tujuan_surat(sph, teks)
+    assert sph.tujuan_surat == "PT. Contoh Jaya Abadi"
+
+
+def test_konsiderans_yang_tersalin_ke_syarat_lampiran_bast_dibuang():
+    """Kasus nyata (kontrak lisensi): enam surat konsiderans ("Surat Nomor ... perihal ...")
+    tersalin utuh ke Syarat Lampiran Wajib BAST, dan akan menjadi checklist lampiran palsu."""
+    surat = "Surat Nomor: 01/ABC/2026 tanggal 19 Juni 2026, perihal Permintaan Proposal Contoh"
+    kontrak = _kontrak_dengan_pendukung(
+        [{"Nama Dokumen": surat}],
+        **{"Syarat Lampiran Wajib BAST": [surat, "Asli Berita Acara Serah Terima (BAST)"]},
+    )
+    rapikan_dokumen_pendukung(kontrak)
+    assert kontrak.syarat_lampiran_bast == ["Asli Berita Acara Serah Terima (BAST)"]
+
+
+def test_syarat_lampiran_kosong_setelah_dibersihkan_menjadi_none():
+    surat = "Berita Acara Negosiasi Harga Tanggal 11 Agustus 2026"
+    kontrak = _kontrak_dengan_pendukung(
+        [{"Nama Dokumen": surat}], **{"Syarat Lampiran Wajib BAST": [surat]}
+    )
+    rapikan_dokumen_pendukung(kontrak)
+    assert kontrak.syarat_lampiran_bast is None
+
+
+# Salinan contoh prompt. Kasus nyata (SPH BUT ke yayasan): Tujuan Surat terisi "Kepala Bagian
+# Umum Dinas Contoh Kota Semarang" -- persis contoh SPH di prompt, tidak ada di dokumen.
+from app.extractors.reconcile import buang_salinan_contoh  # noqa: E402
+
+PROMPT_CONTOH = (
+    'Contoh:\nKepada Yth. Kepala Bagian Umum Dinas Contoh Kota Semarang\n"Lokasi": "Semarang"'
+)
+
+
+def _sph_tujuan(tujuan):
+    from app.schemas.sph import SPHExtractionSchema
+
+    return SPHExtractionSchema.model_validate(
+        {
+            "Vendor": {"Nama Vendor": "PT Contoh"},
+            "Nomor SPH": "01/SPH/2026",
+            "Tanggal SPH": "1 Agustus 2026",
+            "Tujuan Surat / Klien": tujuan,
+            "Subtotal": 1,
+            "Grand Total": 1,
+        }
+    )
+
+
+def test_frasa_contoh_prompt_yang_tidak_ada_di_dokumen_dikosongkan():
+    sph = _sph_tujuan("Kepala Bagian Umum Dinas Contoh Kota Semarang")
+    dibuang = buang_salinan_contoh(sph, "Kepada Yth. Panitia Pengadaan Yayasan Lain", PROMPT_CONTOH)
+    assert sph.tujuan_surat is None
+    assert dibuang == ["Tujuan Surat / Klien"]
+
+
+def test_frasa_yang_juga_ada_di_dokumen_dibiarkan():
+    sph = _sph_tujuan("Kepala Bagian Umum Dinas Contoh Kota Semarang")
+    teks = "Kepada Yth. Kepala Bagian Umum Dinas Contoh Kota Semarang"
+    assert buang_salinan_contoh(sph, teks, PROMPT_CONTOH) == []
+    assert sph.tujuan_surat == "Kepala Bagian Umum Dinas Contoh Kota Semarang"
+
+
+def test_nilai_pendek_yang_kebetulan_sama_dengan_contoh_dibiarkan():
+    """'Semarang', '12 Bulan', '14 hari kalender' bisa memang benar walau ditulis lain."""
+    sph = _sph_tujuan("Semarang")
+    assert buang_salinan_contoh(sph, "Dokumen lain", PROMPT_CONTOH) == []
+
+
+def test_penjaga_salinan_contoh_terpasang_di_ketiga_jenis_dokumen():
+    import inspect
+
+    sumber = "".join(
+        inspect.getsource(m)
+        for m in (
+            OllamaExtractor.extract_contract,
+            OllamaExtractor.extract_sph,
+            OllamaExtractor.extract_bast,
+        )
+    )
+    assert sumber.count("buang_salinan_contoh(") == 3

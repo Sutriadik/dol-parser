@@ -21,6 +21,7 @@ from app.evidence.matcher import (
     looks_like_identifier,
 )
 from app.extractors.deterministic.identifiers import (
+    bersihkan_nama_pekerjaan,
     looks_like_document_number,
     normalize_document_number,
 )
@@ -319,3 +320,306 @@ def test_koreksi_peran_terpasang_di_jalur_ekstraksi():
     assert "fix_contract_number_roles(" in inspect.getsource(
         ollama_client.OllamaExtractor.extract_contract
     )
+
+
+# nama pekerjaan
+# Nama pekerjaan adalah pengikat dokumen satu proyek (kontrak, SPH, BAST). Sebutan jenis
+# surat yang ikut tersalin di depannya membuat nama yang sama tampak berbeda di NocoDB.
+@pytest.mark.parametrize(
+    "masuk,harap",
+    [
+        (
+            "Berita Acara Klarifikasi dan Negosiasi Penyediaan Pelatihan Perangkat IT untuk "
+            "Kampus Contoh Tahun 2025",
+            "Penyediaan Pelatihan Perangkat IT untuk Kampus Contoh Tahun 2025",
+        ),
+        (
+            "Nota Pesanan Pengadaan Perangkat Switch Kebutuhan Dinas Contoh",
+            "Pengadaan Perangkat Switch Kebutuhan Dinas Contoh",
+        ),
+        (
+            "Surat Penawaran Harga (Indicative Offering) Penyediaan Router Manage Service "
+            "untuk Dinas Contoh Tahun 2026",
+            "Penyediaan Router Manage Service untuk Dinas Contoh Tahun 2026",
+        ),
+        (
+            "Penawaran Harga Pelatihan Elektronika Dasar Angkatan II Tahun 2026",
+            "Pelatihan Elektronika Dasar Angkatan II Tahun 2026",
+        ),
+        (
+            "Penawaran Pengadaan Penyusunan Dokumen SDLC Sistem Contoh",
+            "Pengadaan Penyusunan Dokumen SDLC Sistem Contoh",
+        ),
+        (
+            "Permintaan Penawaran Harga Pengadaan Perpanjangan Server Aplikasi Contoh",
+            "Pengadaan Perpanjangan Server Aplikasi Contoh",
+        ),
+        (
+            "Surat Perintah Kerja Pekerjaan Pengadaan Jasa Pembuatan Video Contoh",
+            "Pengadaan Jasa Pembuatan Video Contoh",
+        ),
+        (
+            "BERITA ACARA SERAH TERIMA PENGADAAN PERANGKAT JARINGAN KAMPUS CONTOH",
+            "PENGADAAN PERANGKAT JARINGAN KAMPUS CONTOH",
+        ),
+        (
+            "Perjanjian Kerja Sama tentang Pengadaan Lisensi Aplikasi Contoh",
+            "Pengadaan Lisensi Aplikasi Contoh",
+        ),
+        (
+            "Pekerjaan Pengadaan Perangkat Simulator Contoh",
+            "Pengadaan Perangkat Simulator Contoh",
+        ),
+        (
+            "**Nota Pesanan: Penyediaan Layanan Hosting Contoh**",
+            "Penyediaan Layanan Hosting Contoh",
+        ),
+    ],
+)
+def test_sebutan_jenis_surat_dibuang_dari_nama_pekerjaan(masuk, harap):
+    assert bersihkan_nama_pekerjaan(masuk) == harap
+
+
+@pytest.mark.parametrize(
+    "teks",
+    [
+        "Pengadaan Perpanjangan Lisensi Aplikasi Contoh Tahun 2026",
+        # "Pekerjaan" di sini bagian dari nama, bukan kata pengantar sebelum kata kerja pengadaan.
+        "Pekerjaan Regional Expert Contoh",
+        "Penyediaan Layanan Kontrak Payung Contoh",
+    ],
+)
+def test_nama_pekerjaan_yang_sudah_bersih_tidak_diubah(teks):
+    assert bersihkan_nama_pekerjaan(teks) == teks
+
+
+@pytest.mark.parametrize("teks", ["Penawaran", "Surat Penawaran Harga", "Nota Pesanan", "  "])
+def test_sebutan_surat_saja_bukan_nama_pekerjaan(teks):
+    """Perihal yang hanya berbunyi 'Penawaran' tidak memuat nama proyek; jangan disimpan."""
+    assert bersihkan_nama_pekerjaan(teks) is None
+
+
+def test_hasil_pembersihan_tetap_potongan_teks_dokumen():
+    """Hanya memotong dari depan: nilainya tetap bisa ditemukan di dokumen (grounding)."""
+    asli = "Berita Acara Serah Terima Hasil Pekerjaan Pengadaan Access Point Dinas Contoh"
+    assert bersihkan_nama_pekerjaan(asli) in asli
+
+
+def test_pembersih_nama_pekerjaan_terpasang_di_ketiga_skema():
+    from app.schemas.bast import BASTExtractionSchema
+    from app.schemas.contract import ContractExtractionSchema
+    from app.schemas.sph import SPHExtractionSchema
+
+    pihak = {"Nama Perusahaan": "PT Contoh"}
+    kontrak = ContractExtractionSchema.model_validate(
+        {
+            "Pihak Pertama": pihak,
+            "Pihak Kedua": pihak,
+            "Nama Pekerjaan": "Nota Pesanan Pengadaan Router Contoh",
+        }
+    )
+    sph = SPHExtractionSchema.model_validate(
+        {
+            "Vendor": {"Nama Vendor": "PT Contoh"},
+            "Nomor SPH": "01/SPH/2026",
+            "Tanggal SPH": "1 Juli 2026",
+            "Perihal / Nama Pekerjaan": "Penawaran Harga Pengadaan Router Contoh",
+            "Subtotal": 1,
+            "Grand Total": 1,
+        }
+    )
+    bast = BASTExtractionSchema.model_validate(
+        {
+            "Pihak Pertama": pihak,
+            "Pihak Kedua": pihak,
+            "Nama Pekerjaan": "Berita Acara Serah Terima Pengadaan Router Contoh",
+        }
+    )
+    assert kontrak.nama_pekerjaan == sph.perihal == bast.nama_pekerjaan == "Pengadaan Router Contoh"
+
+
+@pytest.mark.parametrize(
+    "masuk,harap",
+    [
+        # Kasus nyata (SPH vendor scan): OCR menggabungkan baris kop "Perihal : Penawaran" dengan
+        # "Lampiran : Spesifikasi"; hasil lama menyimpan "Lampiran : Spesifikasi".
+        ("Penawaran Lampiran : Spesifikasi", None),
+        ("Pengadaan Router Contoh Lampiran : 1 (satu) berkas", "Pengadaan Router Contoh"),
+        ("Pengadaan Router Contoh Kepada Yth : PT Contoh", "Pengadaan Router Contoh"),
+    ],
+)
+def test_label_kop_berikutnya_tidak_ikut_nama_pekerjaan(masuk, harap):
+    assert bersihkan_nama_pekerjaan(masuk) == harap
+
+
+# rujukan surat permintaan di SPH
+# SPH membalas surat permintaan penawaran (SPPH atau undangan). Kalimat pembukanya menyebut
+# nomor, tanggal, dan perihal surat itu -- sering lebih utuh daripada baris perihal di kop yang
+# rusak OCR. Kasus nyata: kop terbaca "Perihal Kebutuhan Direktorat ..." (separuh pertama hilang).
+from app.services.context_analyzer import ContextAnalyzer  # noqa: E402
+
+SPH_MENUNJUK = (
+    "Kepada Yth. Kepala Bagian Aset Kampus Contoh\n\n"
+    "Perihal Kebutuhan Direktorat Teknologi Contoh\n\n## Dengan Hormat,\n\n"
+    "Menunjuk Surat Nomor: 123/ABC01/ABC-SET/2026 tanggal 31 Juli 2026 perihal Permintaan "
+    "Penawaran Harga Pengadaan Lisensi Contoh Tahun 2026 Kebutuhan Direktorat Teknologi Contoh. "
+    "Kami sampaikan penawaran harga untuk pengadaan tersebut.\n"
+)
+
+
+def test_rujukan_surat_permintaan_dibaca_dari_kalimat_pembuka():
+    assert ContextAnalyzer.parse_rujukan_permintaan(SPH_MENUNJUK) == {
+        "nomor": "123/ABC01/ABC-SET/2026",
+        "tanggal": "31 Juli 2026",
+        "perihal": "Permintaan Penawaran Harga Pengadaan Lisensi Contoh Tahun 2026 "
+        "Kebutuhan Direktorat Teknologi Contoh",
+    }
+
+
+def test_rujukan_template_spph_bentuk_merujuk():
+    teks = (
+        "Dengan Hormat,\nMerujuk Surat Permintaan Penawaran Harga Nomor: 001/22/ABC-04/XYZ/2026 "
+        "tanggal 9 Agustus 2026 perihal Pengadaan Server Aplikasi Contoh. Berikut kami sampaikan\n"
+    )
+    r = ContextAnalyzer.parse_rujukan_permintaan(teks)
+    assert r["nomor"] == "001/22/ABC-04/XYZ/2026"
+    assert r["perihal"] == "Pengadaan Server Aplikasi Contoh"
+
+
+def test_undangan_tanpa_perihal_tetap_memberi_nomor_dan_tanggal():
+    teks = (
+        "Sehubungan dengan undangan pengadaan langsung nomor : 031/07/PL/ABC /IV.02/III/2026 "
+        "tanggal 09 Maret 2026, dengan ini kami mengajukan penawaran untuk pengadaan jasa.\n"
+    )
+    assert ContextAnalyzer.parse_rujukan_permintaan(teks) == {
+        "nomor": "031/07/PL/ABC/IV.02/III/2026",
+        "tanggal": "09 Maret 2026",
+    }
+
+
+def test_akta_pendirian_bukan_rujukan_permintaan():
+    teks = "didirikan berdasarkan Akta Nomor 128 tanggal 24 September 1991 di hadapan Notaris.\n"
+    assert ContextAnalyzer.parse_rujukan_permintaan(teks) == {}
+
+
+def _sph_dengan_perihal(perihal):
+    from app.extractors.ollama_client import OllamaExtractor
+    from app.schemas.sph import SPHExtractionSchema
+
+    ekstraktor = OllamaExtractor.__new__(OllamaExtractor)
+    ekstraktor.context_analyzer = ContextAnalyzer()
+    sph = SPHExtractionSchema.model_validate(
+        {
+            "Vendor": {"Nama Vendor": "PT Contoh"},
+            "Nomor SPH": "01/SPH/2026",
+            "Tanggal SPH": "1 Agustus 2026",
+            "Perihal / Nama Pekerjaan": perihal,
+            "Subtotal": 1,
+            "Grand Total": 1,
+        }
+    )
+    ekstraktor._lengkapi_rujukan_permintaan(sph, SPH_MENUNJUK)
+    return sph
+
+
+def test_perihal_kop_terpotong_dilengkapi_dari_rujukan():
+    sph = _sph_dengan_perihal("Kebutuhan Direktorat Teknologi Contoh")
+    assert sph.perihal == (
+        "Pengadaan Lisensi Contoh Tahun 2026 Kebutuhan Direktorat Teknologi Contoh"
+    )
+    assert sph.nomor_surat_permintaan == "123/ABC01/ABC-SET/2026"
+    assert sph.tanggal_surat_permintaan == "31 Juli 2026"
+
+
+def test_perihal_kop_yang_berbeda_tidak_ditimpa_rujukan():
+    """Rujukan hanya melengkapi potongan; perihal lain tetap milik PM untuk diputuskan."""
+    assert _sph_dengan_perihal("Pengadaan Router Lain").perihal == "Pengadaan Router Lain"
+
+
+def test_rujukan_permintaan_tidak_dikirim_ke_llm():
+    """Field ini dibaca deterministik; menambahkannya ke skema LLM mengubah masukan pass-1."""
+    from app.extractors.llm_output import slim_schema
+    from app.extractors.ollama_client import DETERMINISTIC_FIELDS
+    from app.schemas.sph import SPHExtractionSchema
+
+    props = slim_schema(SPHExtractionSchema, DETERMINISTIC_FIELDS)["properties"]
+    assert "Nomor Surat Permintaan Dirujuk" not in props
+    assert "Tanggal Surat Permintaan Dirujuk" not in props
+
+
+# Tanggal yang ditulis LLM dalam format ISO tetap harus ditemukan di dokumen yang menulisnya
+# "29 Juni 2026". Kasus nyata (kontrak lisensi): Tanggal Negosiasi benar tetapi berstatus
+# UNSUPPORTED, karena "2026-06-29" diperlakukan sebagai angka dan tidak pernah cocok.
+def test_tanggal_iso_ditemukan_dalam_tulisan_indonesia():
+    teks = "Berita Acara Klarifikasi dan Negosiasi Pengadaan Contoh tanggal 29 Juni 2026."
+    skor, jenis = calculate_match_confidence("2026-06-29", teks)
+    assert jenis == "date_match" and skor >= 0.9
+
+
+def test_tanggal_iso_berbeda_tidak_dianggap_cocok():
+    teks = "Berita Acara Klarifikasi dan Negosiasi Pengadaan Contoh tanggal 29 Juni 2026."
+    assert calculate_match_confidence("2026-06-30", teks) == (0.0, None)
+
+
+def test_rujukan_dengan_singkatan_no():
+    """Kasus nyata (SPH BUT ke yayasan): "Menunjuk Surat No : ... tanggal ... perihal ..."."""
+    teks = (
+        "Menunjuk Surat No : 0099/00/ABC-LG02/XYZ/2026 tanggal 19 Juni 2026 perihal Surat "
+        "Permintaan Proposal Penawaran Pengadaan Lisensi Contoh Tahun 2026, bersama ini kami\n"
+    )
+    r = ContextAnalyzer.parse_rujukan_permintaan(teks)
+    assert r["nomor"] == "0099/00/ABC-LG02/XYZ/2026"
+    assert bersihkan_nama_pekerjaan(r["perihal"]).startswith("Pengadaan Lisensi Contoh Tahun 2026")
+
+
+def test_perihal_kop_yang_sudah_utuh_tidak_ditimpa_perihal_rujukan_yang_lebih_panjang():
+    from app.extractors.ollama_client import OllamaExtractor
+    from app.schemas.sph import SPHExtractionSchema
+
+    ekstraktor = OllamaExtractor.__new__(OllamaExtractor)
+    ekstraktor.context_analyzer = ContextAnalyzer()
+    sph = SPHExtractionSchema.model_validate(
+        {
+            "Vendor": {"Nama Vendor": "PT Contoh"},
+            "Nomor SPH": "01/SPH/2026",
+            "Tanggal SPH": "1 Agustus 2026",
+            "Perihal / Nama Pekerjaan": "Surat Penawaran Harga Pengadaan Lisensi Contoh",
+            "Subtotal": 1,
+            "Grand Total": 1,
+        }
+    )
+    teks = (
+        "Menunjuk Surat No : 0099/00/ABC/2026 tanggal 19 Juni 2026 perihal Surat Permintaan "
+        "Proposal Penawaran Pengadaan Lisensi Contoh. Bersama ini kami sampaikan\n"
+    )
+    ekstraktor._lengkapi_rujukan_permintaan(sph, teks)
+    assert sph.perihal == "Pengadaan Lisensi Contoh"
+
+
+# Dokumen Indonesia menulis "30 (tiga puluh) hari kalender"; LLM menyalinnya "30 hari kalender".
+# Kasus nyata (SPH layanan): masa berlaku benar tetapi berstatus UNSUPPORTED.
+def test_terbilang_dalam_kurung_diabaikan_saat_mencocokkan():
+    teks = "3. Masa berlaku penawaran ini selama 30 (tiga puluh) hari kalender."
+    skor, jenis = calculate_match_confidence("30 hari kalender", teks)
+    assert jenis is not None and skor >= 0.7
+
+
+def test_angka_lain_tidak_ikut_cocok_karena_terbilang_dibuang():
+    teks = "3. Masa berlaku penawaran ini selama 30 (tiga puluh) hari kalender."
+    assert calculate_match_confidence("14 hari kalender", teks) == (0.0, None)
+
+
+@pytest.mark.parametrize(
+    "masuk,harap",
+    [
+        # Kasus nyata (nota pesanan): OCR menumpuk label kop di depan judul lampiran.
+        (
+            "Lampiran : 1 berkas : Nota Pesanan Penyediaan Layanan Contoh Tahun 2026",
+            "Penyediaan Layanan Contoh Tahun 2026",
+        ),
+        ("Lampiran SPK : Pengadaan Lisensi Contoh", "Pengadaan Lisensi Contoh"),
+        ("Perihal : Penawaran Harga Pengadaan Router Contoh", "Pengadaan Router Contoh"),
+    ],
+)
+def test_label_kop_di_depan_nama_pekerjaan_dibuang(masuk, harap):
+    assert bersihkan_nama_pekerjaan(masuk) == harap
