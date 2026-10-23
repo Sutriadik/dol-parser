@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.evidence.matcher import canon
+from app.extractors.deterministic.dates import find_dates
 from app.extractors.deterministic.numbers import (
     TARIF_PPN_UMUM,
     amounts_equal,
@@ -290,6 +292,118 @@ def drop_unwritten_sph_totals(ext: "SPHExtractionSchema", markdown_text: str) ->
             "untuk diisi PM, tidak dihitung ulang."
         )
         setattr(ext, attr, None)
+
+
+_PPN = r"(?:ppn|pajak\s+pertambahan\s+nilai(?:\s*\(\s*ppn\s*\))?)"
+_PPN_PERSEN = r"(?:\s*(?P<persen>\d{1,2}(?:[.,]\d{1,2})?\s*%))?"
+_BELUM_PPN = re.compile(
+    rf"(?:(?:belum|tidak)\s+termasuk|sebelum|exclude|excl\.?)\s+{_PPN}{_PPN_PERSEN}", re.I
+)
+# Lookbehind: "termasuk PPN" di dalam "belum termasuk PPN" bukan pernyataan termasuk.
+_TERMASUK_PPN = re.compile(
+    rf"(?<!belum )(?<!tidak )(?:sudah\s+termasuk|termasuk|include|incl\.?|setelah)\s+{_PPN}"
+    rf"{_PPN_PERSEN}",
+    re.I,
+)
+
+
+def lengkapi_keterangan_ppn(ext: BaseModel, markdown_text: str, attr_persen: str) -> None:
+    """
+    Isi `keterangan_ppn` dengan kalimat yang menyatakan harga sudah/belum termasuk PPN,
+    apa adanya ("belum termasuk PPN 11%"), dan tarif PPN yang kosong bila kalimat itu
+    menuliskannya.
+
+    Dikosongkan bila dokumen tidak menyebut PPN secara eksplisit ("sudah termasuk pajak-pajak"
+    tidak dihitung) atau menyebut keduanya: tabel "Jumlah Sebelum PPN / Setelah PPN" sudah
+    menuliskan subtotal dan total masing-masing, jadi keterangannya tidak menambah apa pun.
+    """
+    teks = re.sub(r"\s+", " ", markdown_text)
+    belum, termasuk = list(_BELUM_PPN.finditer(teks)), list(_TERMASUK_PPN.finditer(teks))
+    if bool(belum) == bool(termasuk):
+        return
+    temuan = belum or termasuk
+    ext.keterangan_ppn = temuan[0].group(0).strip()
+    persen = next((m.group("persen") for m in temuan if m.group("persen")), None)
+    if persen and not getattr(ext, attr_persen):
+        setattr(ext, attr_persen, re.sub(r"\s+", "", persen))
+
+
+_HANYA_TANGGAL = re.compile(r"\d{1,2}\s+[A-Za-z]+\s+\d{4}")
+
+
+def _lipat(teks: str | None) -> str:
+    return " ".join((teks or "").lower().split()).strip(" .,;")
+
+
+def rapikan_dokumen_pendukung(ext: BaseModel) -> None:
+    """
+    Dokumen Pendukung kontrak: buang tanggal yang tersalin ke Nomor Dokumen, lalu isi Tanggal
+    Negosiasi yang kosong dari Berita Acara Negosiasi yang tercantum di sana.
+
+    Kasus nyata: konsiderans "Berita Acara Klarifikasi dan Negosiasi Harga <pekerjaan> tanggal
+    24 Januari 2025". Nama pekerjaan memisahkan "Negosiasi" dari "tanggal", jadi petunjuk
+    Tanggal Negosiasi tidak menangkapnya, dan LLM menaruh tanggal itu juga di Nomor Dokumen.
+    Tanggal LLM yang sudah terisi tidak ditimpa.
+
+    Syarat Lampiran Wajib BAST yang sama persis dengan salah satu Dokumen Pendukung juga
+    dibuang: itu daftar surat konsiderans yang terbaca dua kali (kasus nyata: enam surat
+    "Surat Nomor ... perihal ..." menjadi enam syarat lampiran BAST palsu). Suratnya tetap
+    tersimpan di Dokumen Pendukung.
+    """
+    pendukung = ext.dokumen_pendukung or []
+    if ext.syarat_lampiran_bast:
+        konsiderans = {_lipat(d.nama_dokumen) for d in pendukung}
+        sisa = [s for s in ext.syarat_lampiran_bast if _lipat(s) not in konsiderans]
+        if len(sisa) != len(ext.syarat_lampiran_bast):
+            logger.info(
+                f"{len(ext.syarat_lampiran_bast) - len(sisa)} surat konsiderans dibuang dari "
+                "Syarat Lampiran Wajib BAST"
+            )
+            ext.syarat_lampiran_bast = sisa or None
+    for dok in pendukung:
+        nomor = (dok.nomor_dokumen or "").strip()
+        if _HANYA_TANGGAL.fullmatch(nomor) and find_dates(nomor):
+            dok.nomor_dokumen = None
+    if ext.tanggal_negosiasi:
+        return
+    for dok in pendukung:
+        if re.search(r"negosiasi", dok.nama_dokumen or "", re.I) and dok.tanggal_dokumen:
+            logger.info(f"Tanggal Negosiasi diambil dari Dokumen Pendukung: {dok.tanggal_dokumen}")
+            ext.tanggal_negosiasi = dok.tanggal_dokumen
+            return
+
+
+def buang_salinan_contoh(ext: BaseModel, markdown_text: str, teks_prompt: str) -> list[str]:
+    """
+    Kosongkan field opsional yang isinya frasa dari CONTOH di prompt dan tidak ada di dokumen.
+    Mengembalikan alias field yang dikosongkan.
+
+    Kasus nyata (SPH BUT ke yayasan): Tujuan Surat terisi "Kepala Bagian Umum Dinas Contoh
+    Kota Semarang", persis contoh SPH di prompt. Grounding memang menandainya UNSUPPORTED,
+    tetapi nilai karangan tetap terkirim ke PM sebagai isian awal.
+
+    Hanya frasa >= 4 kata: nilai pendek seperti "12 Bulan" atau "14 hari kalender" bisa
+    kebetulan sama dengan contoh padahal benar (ditulis lain di dokumen). Field wajib tidak
+    disentuh; statusnya tetap ditangani grounding.
+    """
+    di_prompt, di_dokumen = f" {canon(teks_prompt)} ", f" {canon(markdown_text)} "
+    dibuang: list[str] = []
+
+    def periksa(obj: BaseModel, awalan: str) -> None:
+        for nama, info in type(obj).model_fields.items():
+            nilai, alias = getattr(obj, nama), f"{awalan}{info.alias or nama}"
+            if isinstance(nilai, BaseModel):
+                periksa(nilai, f"{alias}.")
+            elif isinstance(nilai, str) and not info.is_required():
+                c = canon(nilai)
+                if len(c.split()) >= 4 and f" {c} " in di_prompt and f" {c} " not in di_dokumen:
+                    setattr(obj, nama, None)
+                    dibuang.append(alias)
+
+    periksa(ext, "")
+    if dibuang:
+        logger.warning(f"Nilai salinan contoh prompt dikosongkan: {dibuang}")
+    return dibuang
 
 
 def sanitize_sph_totals(ext: "SPHExtractionSchema") -> None:

@@ -169,3 +169,81 @@ def fix_contract_number_roles(
     if peran_utama == "kedua" and peran_internal == "pertama":
         return nomor_internal, nomor_kontrak
     return nomor_kontrak, nomor_internal
+
+
+# nama pekerjaan
+# Nama pekerjaan dipakai sebagai pengikat dokumen satu proyek: kontrak, SPH, dan BAST yang
+# menyebut pekerjaan yang sama harus tampak sama di NocoDB. LLM sering ikut menyalin sebutan
+# jenis suratnya karena nama pekerjaan memang muncul tepat sesudah judul atau perihal:
+#
+#     judul BAKN  : "Berita Acara Klarifikasi dan Negosiasi <nama pekerjaan>"
+#     perihal SPH : "Penawaran Harga <nama pekerjaan>"
+#     judul NP    : "Nota Pesanan <nama pekerjaan>"
+#
+# Yang dibuang hanya awalan; isi sesudahnya tidak diubah sedikit pun, jadi nilainya tetap
+# potongan teks dokumen dan masih bisa ditemukan oleh grounding.
+_KATA_KERJA_PENGADAAN = (
+    r"(?:pengadaan|penyediaan|pembangunan|pemeliharaan|perpanjangan|pelaksanaan|pembuatan"
+    r"|pengembangan|perawatan|pemasangan|instalasi|implementasi|jasa|layanan|pelatihan|sewa)"
+)
+# (?!\w), bukan \b: awalan bisa berakhir dengan ")" pada "(Indicative Offering)", dan \b
+# tidak berlaku di antara ")" dan spasi.
+_SEBUTAN_SURAT = re.compile(
+    r"^(?:"
+    r"(?:surat\s+)?(?:permintaan\s+)?(?:proposal\s+)?penawaran(?:\s+harga)?(?:\s*\([^)]{0,40}\))?"
+    r"|berita\s+acara(?:[\s,]+(?:klarifikasi|evaluasi|negosiasi|kesepakatan|serah|terima|uji"
+    r"|fungsi|penyelesaian|pemeriksaan|rekonsiliasi|harga|hasil|teknis|pekerjaan|barang|dan))*"
+    r"|nota\s+(?:pesanan|dinas)|surat\s+pesanan|surat\s+perintah\s+(?:mulai\s+)?kerja"
+    r"|(?:perjanjian|kontrak)(?:\s+kerja\s*sama|\s+kerja)?"
+    r"|spmk|spk|pks|spph|sph|nopes|ba(?:st|ut|rd|pp|pb|kn)"
+    r")(?!\w)",
+    re.IGNORECASE,
+)
+_PENGHUBUNG = re.compile(
+    r"^[\s:,\-–]*(?:(?:untuk|atas|tentang|perihal|mengenai|hal)(?!\w)[\s:]*)?(?:pekerjaan\s+)?",
+    re.IGNORECASE,
+)
+# "Pekerjaan Pengadaan X" (judul BAKN) -> "Pengadaan X"; "Pekerjaan Regional Expert" tetap,
+# karena di situ "Pekerjaan" bagian dari namanya.
+_PEKERJAAN_DI_DEPAN = re.compile(rf"^pekerjaan\s+(?={_KATA_KERJA_PENGADAAN}(?!\w))", re.I)
+_HIASAN_TEPI = re.compile(r"^[\s#*_\"'“”‘’:\-–]+|[\s*_\"'“”‘’,;:\-–]+$")
+# OCR kop surat dua kolom menggabungkan baris label berikutnya ke perihal: kasus nyata
+# "Perihal : Penawaran Lampiran : Spesifikasi Kepada Yth : PT ...". Label kop bukan bagian
+# nama pekerjaan, jadi teks dipotong di label pertama yang muncul.
+# Label kop di DEPAN nilai: kasus nyata nota pesanan "Lampiran : 1 berkas : Nota Pesanan ...".
+_LABEL_KOP_DI_DEPAN = re.compile(
+    r"^(?:lampiran(?:\s+spk)?|perihal|hal)\s*:\s*"
+    r"(?:\d+\s*(?:\(\s*\w+\s*\)\s*)?(?:berkas|lembar|set|eksemplar|bundel)\s*:?)?",
+    re.I,
+)
+_LABEL_KOP_BERIKUTNYA = re.compile(
+    r"\s+(?:lampiran|nomor|no\.?|sifat|kepada(?:\s+yth\.?)?|yth\.?)\s*:.*$", re.I
+)
+
+
+def bersihkan_nama_pekerjaan(value: str | None) -> str | None:
+    """
+    Buang sebutan jenis surat di depan nama pekerjaan.
+
+        "Nota Pesanan Pengadaan Router X"            -> "Pengadaan Router X"
+        "Surat Penawaran Harga (Indicative Offering) Penyediaan Y" -> "Penyediaan Y"
+        "Penawaran"                                  -> None (tidak ada nama proyeknya)
+
+    None bila yang tersisa kosong: perihal yang hanya berbunyi "Penawaran" tidak memuat
+    nama pekerjaan, dan menyimpannya membuat PM mengira field itu sudah terisi.
+    """
+    if not isinstance(value, str):
+        return value
+    teks = _LABEL_KOP_BERIKUTNYA.sub("", re.sub(r"\s+", " ", value))
+    teks = _HIASAN_TEPI.sub("", teks)
+    while teks:
+        m = _LABEL_KOP_DI_DEPAN.match(teks) or _SEBUTAN_SURAT.match(teks)
+        if m:
+            sisa = _PENGHUBUNG.sub("", teks[m.end() :], count=1)
+        else:
+            sisa = _PEKERJAAN_DI_DEPAN.sub("", teks, count=1)
+        sisa = _HIASAN_TEPI.sub("", sisa)
+        if sisa == teks:
+            break
+        teks = sisa
+    return teks or None
