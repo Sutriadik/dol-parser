@@ -21,6 +21,7 @@ Bentuk keluaran sengaja bukan baris tabel: tabel BAST masih usulan di dol_schema
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from typing import Any
 
@@ -28,16 +29,59 @@ _PIHAK_FIELD = {"PIHAK PERTAMA": "Pihak Pertama", "PIHAK KEDUA": "Pihak Kedua"}
 _ITEM = "List Item/Barang[{i}].{f}"
 _WAJIB_KEPALA = ("Nomor Kontrak Kerja", "Nama Pekerjaan", "Tanggal Pembuatan Dokumen")
 
+# Nilai Sistem Saat Diperiksa dari tombol Cek Baris (scripts/nocodb_setup.py `_nilai_baris`):
+# "Volume Satuan x Harga Satuan = Jumlah Harga". Pola yang sama ada di view `keputusan_baris`
+# (dol-schema ddl.py); angka ditangkap hanya bila sintaksnya angka, jadi selalu bisa dibaca.
+_ANGKA = r"(-?[0-9]+(?:\.[0-9]+)?)?"
+_NILAI_BARIS = re.compile(rf"^\s*{_ANGKA}\s(.*)\sx\s+{_ANGKA}\s*=\s*{_ANGKA}\s*$")
+
+
+def _desimal(v: Any) -> float | None:
+    return None if v in (None, "") else float(v)
+
+
+def _baris_masih_sama(dilihat: str | None, baris: dict[str, Any]) -> bool:
+    """
+    Apakah baris rincian sekarang masih yang dilihat PM saat memutuskan? Dibandingkan sebagai
+    angka: NocoDB bisa menulis 5000000 sebagai "5000000.00". Yang tidak bisa dibaca dianggap
+    berubah, supaya keputusan lama tidak berlaku untuk nilai yang tidak pernah dilihat PM.
+    """
+    m = _NILAI_BARIS.match(dilihat or "")
+    if not m:
+        return False
+    volume, satuan, harga, jumlah = m.groups()
+    try:
+        angka_sama = (
+            _desimal(volume) == _desimal(baris.get("quantity"))
+            and _desimal(harga) == _desimal(baris.get("unit_price"))
+            and _desimal(jumlah) == _desimal(baris.get("line_total"))
+        )
+    except (TypeError, ValueError):
+        return False
+    return angka_sama and (satuan.strip() or None) == ((baris.get("unit") or "").strip() or None)
+
 
 def hitung_nilai_terverifikasi(
-    extracted_fields: Iterable[dict[str, Any]], reviews: Iterable[dict[str, Any]]
+    extracted_fields: Iterable[dict[str, Any]],
+    reviews: Iterable[dict[str, Any]],
+    *,
+    sph_item: Iterable[dict[str, Any]] = (),
+    contract_item: Iterable[dict[str, Any]] = (),
 ) -> dict[str, str]:
     """
     Sama persis dengan view PostgreSQL `nilai_terverifikasi` (dol-schema), untuk jalur
     NocoDB yang tidak punya view: {field_path: nilai} hanya untuk field yang diputuskan PM
     `benar`/`dikoreksi` dan keputusannya belum basi (nilai sistem tidak berubah sejak itu).
+
+    Keputusan per baris rincian (grid verifikasi, briefing hlm. 14) menunjuk barisnya lewat
+    `sph_item_id`/`contract_item_id` dan Nama Field `Daftar Penawaran Harga[2]`. `benar`
+    berlaku untuk setiap sel `Daftar Penawaran Harga[2].*` yang tidak punya keputusan sendiri,
+    selama Volume, Satuan, Harga Satuan, dan Jumlah Harga baris itu (`sph_item`/`contract_item`,
+    nama teknis) masih sama dengan yang dilihat PM. `dikoreksi` per baris tidak dipecah ke sel:
+    Nilai Finalnya teks bebas, dan menebak sel mana yang dikoreksi sama dengan mengarang nilai.
     """
     sistem = {ef["field_path"]: ef.get("ai_value_text") for ef in extracted_fields}
+    reviews = list(reviews)
     hasil: dict[str, str] = {}
     for rv in reviews:
         fp = rv.get("field_path")
@@ -46,6 +90,23 @@ def hitung_nilai_terverifikasi(
         if sistem[fp] != rv.get("reviewed_ai_value_text"):
             continue  # basi: PM melihat nilai lain
         hasil[fp] = rv.get("final_value_text") if rv["decision"] == "dikoreksi" else sistem[fp]
+
+    rincian = {("sph_item", r["id"]): r for r in sph_item}
+    rincian.update({("contract_item", r["id"]): r for r in contract_item})
+    punya_keputusan_sendiri = {rv.get("field_path") for rv in reviews}
+    for rv in reviews:
+        if rv.get("sph_item_id") is not None:
+            baris = rincian.get(("sph_item", rv["sph_item_id"]))
+        else:
+            baris = rincian.get(("contract_item", rv.get("contract_item_id")))
+        if rv.get("decision") != "benar" or baris is None:
+            continue
+        if not _baris_masih_sama(rv.get("reviewed_ai_value_text"), baris):
+            continue
+        awalan = f"{rv['field_path']}."
+        for fp, nilai in sistem.items():
+            if fp.startswith(awalan) and fp not in punya_keputusan_sendiri:
+                hasil[fp] = nilai
     return hasil
 
 
