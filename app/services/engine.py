@@ -39,6 +39,7 @@ from app.validation.rules import (
     note_hidden_text,
     note_penandatangan,
     note_second_ocr,
+    note_tabel_kosong,
     validate_extraction,
 )
 
@@ -387,6 +388,7 @@ class OpenADEEngine:
         validation = note_second_ocr(validation, ocr_berbeda)
         validation = check_amounts_grounded(validation, detected_type, evidence)
         validation = note_duplicate_pages(validation, duplicate_pages)
+        validation = note_tabel_kosong(validation, parsed.markdown)
         validation = note_hidden_text(
             validation, parsed.metadata.teks_tersembunyi, parsed.metadata.teks_tersembunyi_dibuang
         )

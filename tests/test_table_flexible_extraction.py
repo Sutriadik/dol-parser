@@ -823,3 +823,57 @@ def test_baris_bernomor_berharga_dengan_uraian_kosong_tetap_dihitung():
         ("Barang Contoh A", 1_000_000),
         ("", 500_000),
     ]
+
+
+# Tabel rincian yang hanya terbaca judul kolomnya. Kasus nyata (lampiran nota pesanan scan):
+# Docling mengeluarkan baris judul + pemisah tanpa satu pun baris isi, rincian tersimpan 0 item,
+# dan PM tidak diberi tanda apa pun -- seolah kontrak memang tanpa rincian.
+from app.schemas.evidence import ValidationReport  # noqa: E402
+from app.validation.rules import note_tabel_kosong  # noqa: E402
+
+TABEL_JUDUL_SAJA = (
+    "Halaman satu\n\n<!-- PAGE BREAK -->\n\n## RINCIAN LAYANAN, SPESIFIKASI TEKNIS, DAN HARGA\n\n"
+    "| No | Layanan Tambahan | Spesifikasi dan Quantity | Jumlah | Satuan | Harga Satuan (Rp) |"
+    " Harga Total (Rp) |\n"
+    "|:-----|:-----|:-----|:-----|:-----|:-----|:-----|\n\nBandung, 2 Januari 2031\n"
+)
+
+
+def _catatan(md):
+    laporan = note_tabel_kosong(ValidationReport(status="pass", rule_version="uji"), md)
+    return [i for i in laporan.issues if i.rule == "tabel_kosong"]
+
+
+def test_tabel_rincian_tanpa_baris_isi_diberi_peringatan():
+    catatan = _catatan(TABEL_JUDUL_SAJA)
+    assert len(catatan) == 1
+    assert "halaman 2" in catatan[0].message
+    assert "Harga Satuan" in catatan[0].message
+
+
+def test_tabel_rincian_berisi_tidak_diberi_peringatan():
+    md = TABEL_JUDUL_SAJA.replace(
+        "\n\nBandung", "\n| 1 | Layanan Contoh | 1 unit | 1 | Paket | 1.000 | 1.000 |\n\nBandung"
+    )
+    assert _catatan(md) == []
+
+
+def test_tabel_kosong_yang_bukan_rincian_tidak_diberi_peringatan():
+    """Tabel tata letak tanda tangan atau kop tanpa kolom harga/jumlah bukan urusan PM."""
+    md = "| PIHAK PERTAMA | PIHAK KEDUA |\n|:--|:--|\n\nlanjut\n"
+    assert _catatan(md) == []
+
+
+def test_salinan_ganda_tabel_yang_sama_cukup_satu_peringatan():
+    md = TABEL_JUDUL_SAJA + "\n<!-- PAGE BREAK -->\n\n" + TABEL_JUDUL_SAJA
+    catatan = _catatan(md)
+    assert len(catatan) == 1
+    assert "halaman 2, 4" in catatan[0].message
+
+
+def test_peringatan_tabel_kosong_terpasang_di_pipeline():
+    import inspect
+
+    from app.services import engine
+
+    assert "note_tabel_kosong(" in inspect.getsource(engine.OpenADEEngine.process_full)

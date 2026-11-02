@@ -17,6 +17,7 @@ from app.extractors.deterministic.numbers import (
     parse_id_number,
     terbilang_to_number,
 )
+from app.parsers.table_extractor import is_markdown_table_separator, parse_markdown_table_row
 from app.schemas.evidence import Severity, ValidationIssue, ValidationReport
 
 RULE_VERSION = "rules-2026.10.3"
@@ -454,6 +455,61 @@ def note_duplicate_pages(report: ValidationReport, duplicate_pages: list[int]) -
             f"mengulang halaman sebelumnya dan tidak ikut diekstrak. Pastikan isinya memang "
             f"sama (bukan revisi).",
             actual=duplicate_pages,
+        )
+    return c.report()
+
+
+# Judul kolom khas tabel rincian/BoQ. Dua kecocokan cukup: tabel tata letak (kolom tanda
+# tangan, kop) tidak punya satu pun.
+_KOLOM_RINCIAN = re.compile(
+    r"harga|jumlah|qty|volume|\bvol\b|satuan|uraian|deskripsi|layanan|barang|item", re.I
+)
+
+
+def note_tabel_kosong(report: ValidationReport, markdown_text: str) -> ValidationReport:
+    """
+    Beri tahu PM bila tabel rincian hanya terbaca judul kolomnya.
+
+    Kasus nyata (lampiran nota pesanan scan): pembaca tabel mengeluarkan baris judul dan
+    pemisah tanpa satu pun baris isi. Rincian tersimpan 0 item dan tidak ada tanda apa pun,
+    sehingga PM bisa mengira kontraknya memang tanpa rincian. Salinan ganda tabel yang sama
+    digabung menjadi satu catatan.
+    """
+    baris = markdown_text.splitlines()
+    temuan: dict[str, list[int]] = {}
+    halaman = 1
+    for i, teks in enumerate(baris):
+        if "<!-- PAGE BREAK -->" in teks:
+            halaman += 1
+            continue
+        mulai_tabel = (
+            teks.strip().startswith("|")
+            and i + 1 < len(baris)
+            and is_markdown_table_separator(baris[i + 1])
+            and not (i > 0 and baris[i - 1].strip().startswith("|"))
+        )
+        if not mulai_tabel:
+            continue
+        j, berisi = i + 2, False
+        while j < len(baris) and baris[j].strip().startswith("|"):
+            berisi = berisi or any(c.strip() for c in parse_markdown_table_row(baris[j]))
+            j += 1
+        judul = [k.strip() for k in parse_markdown_table_row(teks) if k.strip()]
+        if not berisi and sum(bool(_KOLOM_RINCIAN.search(k)) for k in judul) >= 2:
+            temuan.setdefault(" | ".join(judul), []).append(halaman)
+
+    c = _Checker()
+    c.issues, c.checked = list(report.issues), list(report.checked_rules)
+    c.rule("tabel_kosong")
+    for judul, hal in temuan.items():
+        c.add(
+            "tabel_kosong",
+            Severity.WARNING,
+            [],
+            f"Tabel di halaman {', '.join(map(str, hal))} hanya terbaca judul kolomnya "
+            f"({judul}); isinya tidak terbaca. Rincian item bisa kurang: periksa tabel ini di "
+            "PDF.",
+            actual=hal,
         )
     return c.report()
 
